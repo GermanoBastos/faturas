@@ -109,7 +109,7 @@ if uploaded_file:
                 st.dataframe(df_transacoes)
                 # Soma no Streamlit
                 total_transacoes = df_transacoes["Valor (R$)"].sum()
-                st.info(f"💰 Total Transações: R$ {total_transacoes:,.2f}")
+                st.info(f"💰 Total de Débitos: R$ {total_transacoes:,.2f}")
 
             if listas_favorecidos:
                 df_favorecidos = pd.concat(listas_favorecidos, ignore_index=True)
@@ -117,7 +117,7 @@ if uploaded_file:
                 st.dataframe(df_favorecidos)
                 # Soma no Streamlit
                 total_favorecidos = df_favorecidos["Valor (R$)"].sum()
-                st.info(f"💰 Total Favorecidos: R$ {total_favorecidos:,.2f}")
+                st.info(f"💰 Total de Envios de PIX: R$ {total_favorecidos:,.2f}")
 
             # Input para nome do Excel já preenchido com nome do PDF
             default_name = uploaded_file.name.rsplit(".", 1)[0]
@@ -186,3 +186,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
