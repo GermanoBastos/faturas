@@ -223,7 +223,8 @@ if uploaded_file:
                             "Despesa": f"Despesa Germano {nome_arquivo}",
                             "Valor": float(total_geral),
                             "Vencimento": vencimento.strftime("%m/%d/%Y"),
-                            "QuemPagou": "Germano"  # aqui você coloca o valor desejado da Choice
+                            "QuemPagou": "Germano",
+                            "pago": "sim"
                         }
                     }
 
@@ -244,6 +245,7 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
 
 
