@@ -21,7 +21,7 @@ st.title("Extrair Débitos da Fatura (com Tabelas e valores numéricos)")
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 # ===============================
-# Utilitários
+# Funções utilitárias
 # ===============================
 def sanitize_filename(name):
     valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
@@ -29,14 +29,12 @@ def sanitize_filename(name):
 
 def extract_text_from_pdf(file):
     texts = []
-    # tenta extrair texto nativo
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
             txt = page.extract_text()
             if txt:
                 texts.append(txt)
 
-    # se nada, tenta OCR
     if not texts:
         st.info("PDF sem texto detectável. Usando OCR...")
         file.seek(0)
@@ -47,16 +45,10 @@ def extract_text_from_pdf(file):
     return texts
 
 def valor_br_para_float(valor_str):
-    """
-    Converte string no formato BR (1.234,56 ou 123,45) para float.
-    Retorna float com duas casas (rounded).
-    """
+    """Converte string BR para float com 2 casas decimais"""
     if valor_str is None:
         return 0.0
-    # remover espaços
-    v = str(valor_str).strip()
-    # remover pontos de milhar e trocar vírgula por ponto decimal
-    v = v.replace(".", "").replace(",", ".")
+    v = str(valor_str).strip().replace(".", "").replace(",", ".")
     try:
         return round(float(v), 2)
     except:
@@ -66,16 +58,10 @@ def valor_br_para_float(valor_str):
 # Extrair Tabela 1 – Transações
 # ===============================
 def extract_tabela_transacoes(text):
-    """
-    Extrai linhas com: Data | Estabelecimento | Valor (formato BR)
-    Retorna DataFrame com Valor como float (2 casas).
-    """
     pattern = r"(\d{2}/\d{2})\s+[\d.]+\s+(.+?)\s+([\d.,]+)$"
     matches = re.findall(pattern, text, re.MULTILINE)
-
     if not matches:
         return pd.DataFrame()
-
     df = pd.DataFrame(matches, columns=["Data", "Estabelecimento", "Valor (R$)"])
     df["Valor (R$)"] = df["Valor (R$)"].apply(valor_br_para_float)
     return df
@@ -84,41 +70,26 @@ def extract_tabela_transacoes(text):
 # Extrair Tabela 2 – Favorecidos
 # ===============================
 def extract_tabela_favorecidos(text):
-    """
-    Extrai linhas com:
-    Data | Canal | Tipo | Favorecido | ISPB* | Agência | Conta | Valor (R$)
-    Para validação exigimos tais campos; retornamos apenas Data, Favorecido, Valor (float).
-    """
-    # Regex mais restritiva: Data + Canal (palavra), Tipo (palavras), Favorecido (captura não-gulosa), ISPB (8 dígitos),
-    # Agência (3-5 dígitos), Conta (números e hífens), Valor (formato BR)
     pattern = (
-        r"(\d{2}/\d{2})\s+"          # Data
-        r"(\S+)\s+"                  # Canal (ex: PIX, TED)
-        r"([A-Z0-9\s]+?)\s+"         # Tipo (ex: TRANSFERENCIA) - admite números e espaços
-        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+"  # Favorecido (mais permissivo com acentos, pontos, hífens)
-        r"(\d{8})\s+"                # ISPB (8 dígitos)
-        r"(\d{3,5})\s+"              # Agência
-        r"([\d\-]+)\s+"              # Conta
-        r"([\d.,]+)"                 # Valor (ex: 1.234,56 ou 123,45)
+        r"(\d{2}/\d{2})\s+"            # Data
+        r"(\S+)\s+"                     # Canal
+        r"([A-Z0-9\s]+?)\s+"            # Tipo
+        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+"  # Favorecido
+        r"(\d{8})\s+"                   # ISPB
+        r"(\d{3,5})\s+"                 # Agência
+        r"([\d\-]+)\s+"                 # Conta
+        r"([\d.,]+)"                     # Valor
     )
-
     matches = re.findall(pattern, text, re.MULTILINE)
-
     if not matches:
         return pd.DataFrame()
-
-    # matches columns: Data, Canal, Tipo, Favorecido, ISPB, Agência, Conta, Valor
     df_full = pd.DataFrame(matches, columns=[
         "Data", "Canal", "Tipo", "Favorecido", "ISPB", "Agência", "Conta", "Valor (raw)"
     ])
-
-    # converter Valor e manter só as colunas desejadas
     df = pd.DataFrame()
     df["Data"] = df_full["Data"]
-    # limpar espaços extras em Favorecido
     df["Favorecido"] = df_full["Favorecido"].str.strip()
     df["Valor (R$)"] = df_full["Valor (raw)"].apply(valor_br_para_float)
-
     return df
 
 # ===============================
@@ -144,6 +115,7 @@ if uploaded_file:
         if not listas_transacoes and not listas_favorecidos:
             st.warning("Nenhuma tabela reconhecida no PDF.")
         else:
+            # Pré-visualização
             st.subheader("Pré-visualização das tabelas encontradas")
             if listas_transacoes:
                 preview_t = pd.concat(listas_transacoes, ignore_index=True)
@@ -154,10 +126,14 @@ if uploaded_file:
                 st.write("Favorecidos (Data | Favorecido | Valor):")
                 st.dataframe(preview_f)
 
-            nome_arquivo = st.text_input("Nome do arquivo Excel (sem .xlsx)", "fatura_extraida")
+            # Input para nome do Excel já preenchido com nome do PDF
+            default_name = uploaded_file.name.rsplit(".", 1)[0]
+            nome_arquivo = st.text_input(
+                "Nome do arquivo Excel (sem .xlsx)",
+                value=default_name
+            )
 
             if st.button("Gerar Excel"):
-                # montar DataFrames finais (concatenar páginas)
                 if listas_transacoes:
                     df_transacoes = pd.concat(listas_transacoes, ignore_index=True)
                 else:
@@ -168,9 +144,7 @@ if uploaded_file:
                 else:
                     df_favorecidos = pd.DataFrame(columns=["Data", "Favorecido", "Valor (R$)"])
 
-                # preparar BytesIO
                 output = BytesIO()
-
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
                     style = TableStyleInfo(
                         name="TableStyleMedium9",
@@ -180,50 +154,39 @@ if uploaded_file:
                         showColumnStripes=False
                     )
 
-                    # Escrever Transações e transformar em Table
+                    # --- Transações ---
                     if not df_transacoes.empty:
                         sheet_name = "Transacoes"
                         df_transacoes.to_excel(writer, sheet_name=sheet_name, index=False)
                         ws = writer.book[sheet_name]
-
                         max_row = ws.max_row
                         max_col = ws.max_column
                         ref = f"A1:{get_column_letter(max_col)}{max_row}"
-
                         tabela = Table(displayName="TabelaTransacoes", ref=ref)
                         tabela.tableStyleInfo = style
                         ws.add_table(tabela)
-
-                        # Formatar a última coluna (Valor) como número com 2 casas
-                        col_letter = get_column_letter(max_col)
+                        # formatar coluna Valor
                         for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
                             for cell in row:
                                 cell.number_format = '#,##0.00'
 
-                    # Escrever Favorecidos e transformar em Table
+                    # --- Favorecidos ---
                     if not df_favorecidos.empty:
                         sheet_name = "Favorecidos"
                         df_favorecidos.to_excel(writer, sheet_name=sheet_name, index=False)
                         ws = writer.book[sheet_name]
-
                         max_row = ws.max_row
                         max_col = ws.max_column
                         ref = f"A1:{get_column_letter(max_col)}{max_row}"
-
                         tabela = Table(displayName="TabelaFavorecidos", ref=ref)
                         tabela.tableStyleInfo = style
                         ws.add_table(tabela)
-
-                        # Formatar a última coluna (Valor) como número com 2 casas
-                        col_letter = get_column_letter(max_col)
+                        # formatar coluna Valor
                         for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
                             for cell in row:
                                 cell.number_format = '#,##0.00'
 
-                    # salvar o arquivo no BytesIO (ExcelWriter faz isso no exit)
-
                 output.seek(0)
-
                 st.success("Excel gerado com sucesso — pronto para download.")
                 st.download_button(
                     label="📥 Baixar Excel",
