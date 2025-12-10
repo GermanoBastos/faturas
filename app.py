@@ -83,12 +83,7 @@ def extract_table_favorecidos(text):
 
     pattern = (
         r"(\d{2}/\d{2})\s+"            # Data
-        r"([A-Z]+)\s+"                 # Canal
-        r"([A-Z\s]+?)\s+"              # Tipo
         r"([A-Z\s]+?)\s+"              # Favorecido
-        r"(\d{8})\s+"                  # ISPB
-        r"(\d{3,5})\s+"                # Agência
-        r"([\d\-]+)\s+"                # Conta
         r"([\d.,]+)$"                  # Valor
     )
 
@@ -182,5 +177,6 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
 
