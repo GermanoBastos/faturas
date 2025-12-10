@@ -124,21 +124,41 @@ if uploaded_file:
             if st.button("Gerar Excel"):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    # Aba única "Fatura"
                     sheet_name = "Fatura"
                     start_row = 0
+                    style = TableStyleInfo(
+                        name="TableStyleMedium9",
+                        showFirstColumn=False,
+                        showLastColumn=False,
+                        showRowStripes=True,
+                        showColumnStripes=False
+                    )
 
-                    # Débitos
+                    # ---- Débitos ----
                     if listas_transacoes:
                         df_transacoes.to_excel(writer, sheet_name=sheet_name, index=False, startrow=start_row)
-                        start_row += len(df_transacoes) + 3  # espaço entre tabelas
+                        ws = writer.book[sheet_name]
+                        max_row = ws.max_row
+                        max_col = ws.max_column
+                        ref = f"A1:{get_column_letter(max_col)}{max_row}"
+                        tabela = Table(displayName="TabelaDebitos", ref=ref)
+                        tabela.tableStyleInfo = style
+                        ws.add_table(tabela)
+                        start_row += max_row + 2  # espaço entre tabelas
 
-                    # PIX
+                    # ---- PIX ----
                     if listas_favorecidos:
                         df_favorecidos.to_excel(writer, sheet_name=sheet_name, index=False, startrow=start_row)
-                        start_row += len(df_favorecidos) + 3
+                        ws = writer.book[sheet_name]
+                        max_row = ws.max_row
+                        max_col = ws.max_column
+                        ref = f"A{start_row+1}:{get_column_letter(max_col)}{max_row}"
+                        tabela = Table(displayName="TabelaPIX", ref=ref)
+                        tabela.tableStyleInfo = style
+                        ws.add_table(tabela)
+                        start_row += max_row - start_row + 2
 
-                    # Totais
+                    # ---- Totais ----
                     df_totais = pd.DataFrame({
                         "Tipo": ["Débitos", "PIX", "Total Geral"],
                         "Valor (R$)": [total_debitos, total_pix, total_geral]
