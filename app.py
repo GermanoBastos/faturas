@@ -78,7 +78,8 @@ def extract_table_transacoes(text):
 # =========================
 def extract_table_favorecidos(text):
     """
-    Data | Canal | Tipo | Favorecido | ISPB | Agência | Conta | Valor
+    Extrai a tabela completa para validação,
+    mas retorna apenas Data, Favorecido e Valor
     """
 
     pattern = (
@@ -94,23 +95,25 @@ def extract_table_favorecidos(text):
 
     matches = re.findall(pattern, text, re.MULTILINE)
 
-    if matches:
-        return pd.DataFrame(
-            matches,
-            columns=[
-                "Data",
-                "Canal",
-                "Tipo",
-                "Favorecido",
-                "ISPB",
-                "Agência",
-                "Conta",
-                "Valor (R$)"
-            ]
-        )
+    if not matches:
+        return pd.DataFrame()
 
-    return pd.DataFrame()
+    df = pd.DataFrame(
+        matches,
+        columns=[
+            "Data",
+            "Canal",
+            "Tipo",
+            "Favorecido",
+            "ISPB",
+            "Agência",
+            "Conta",
+            "Valor (R$)"
+        ]
+    )
 
+    # ✅ Retorna SOMENTE as colunas desejadas
+    return df[["Data", "Favorecido", "Valor (R$)"]]
 
 # =========================
 # Execução principal
@@ -187,3 +190,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
