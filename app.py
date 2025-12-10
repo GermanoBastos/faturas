@@ -101,7 +101,7 @@ if uploaded_file:
             st.warning("Nenhuma tabela reconhecida no PDF.")
         else:
             # Pré-visualização
-            st.subheader("Pré-visualização das tabelas encontradas")
+            st.subheader("Débitos e envios de PIX")
 
             if listas_transacoes:
                 df_transacoes = pd.concat(listas_transacoes, ignore_index=True)
@@ -186,5 +186,6 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
 
