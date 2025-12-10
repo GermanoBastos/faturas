@@ -5,13 +5,17 @@ import re
 from io import BytesIO
 from pdf2image import convert_from_bytes
 import pytesseract
+import string
 
+# Configurações da página
 st.set_page_config(page_title="Extrair Fatura para Excel", layout="wide")
 st.title("Extrair Débitos e Gerar Excel")
 
+# Upload do PDF
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 def extract_text_from_pdf(file):
+    """Extrai texto do PDF; se não houver, usa OCR"""
     texts = []
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
@@ -41,6 +45,11 @@ def extract_table_from_text(text):
     else:
         return pd.DataFrame()
 
+def sanitize_filename(name):
+    """Remove caracteres inválidos para nome de arquivo"""
+    valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
+    return "".join(c for c in name if c in valid_chars).strip() or "fatura_extraida"
+
 if uploaded_file:
     try:
         uploaded_file.seek(0)
@@ -51,16 +60,20 @@ if uploaded_file:
             # Concatenar todas as tabelas extraídas
             final_df = pd.concat(all_tables, ignore_index=True)
 
-            # Gerar Excel imediatamente
+            # Pedir nome do arquivo para o usuário
+            file_name_input = st.text_input("Digite o nome do arquivo Excel (sem extensão)", "fatura_extraida")
+            excel_file_name = sanitize_filename(file_name_input) + ".xlsx"
+
+            # Gerar Excel
             output = BytesIO()
             final_df.to_excel(output, index=False, engine='openpyxl')
             output.seek(0)
 
-            # Botão de download exibido logo no topo
+            # Botão de download
             st.download_button(
                 label="Clique para baixar o Excel",
                 data=output,
-                file_name="fatura_extraida.xlsx",
+                file_name=excel_file_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
@@ -73,4 +86,3 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Ocorreu um erro: {e}")
-
