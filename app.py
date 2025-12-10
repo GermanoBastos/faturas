@@ -9,20 +9,14 @@ import string
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 
-# ===============================
 # Configuração da página
-# ===============================
 st.set_page_config(page_title="Extrair Fatura para Excel", layout="wide")
-st.title("Extrair Débitos da Fatura (com Tabelas, valores e totais)")
+st.title("Extrair Débitos da Fatura (com Totais e Excel)")
 
-# ===============================
 # Upload do PDF
-# ===============================
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
-# ===============================
 # Funções utilitárias
-# ===============================
 def sanitize_filename(name):
     valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
     return "".join(c for c in name if c in valid_chars).strip() or "fatura_extraida"
@@ -34,18 +28,15 @@ def extract_text_from_pdf(file):
             txt = page.extract_text()
             if txt:
                 texts.append(txt)
-
     if not texts:
         st.info("PDF sem texto detectável. Usando OCR...")
         file.seek(0)
         images = convert_from_bytes(file.read())
         for img in images:
             texts.append(pytesseract.image_to_string(img, lang="por"))
-
     return texts
 
 def valor_br_para_float(valor_str):
-    """Converte string BR para float com 2 casas decimais"""
     if valor_str is None:
         return 0.0
     v = str(valor_str).strip().replace(".", "").replace(",", ".")
@@ -54,9 +45,7 @@ def valor_br_para_float(valor_str):
     except:
         return 0.0
 
-# ===============================
 # Extrair Tabela 1 – Transações
-# ===============================
 def extract_tabela_transacoes(text):
     pattern = r"(\d{2}/\d{2})\s+[\d.]+\s+(.+?)\s+([\d.,]+)$"
     matches = re.findall(pattern, text, re.MULTILINE)
@@ -66,19 +55,17 @@ def extract_tabela_transacoes(text):
     df["Valor (R$)"] = df["Valor (R$)"].apply(valor_br_para_float)
     return df
 
-# ===============================
 # Extrair Tabela 2 – Favorecidos
-# ===============================
 def extract_tabela_favorecidos(text):
     pattern = (
-        r"(\d{2}/\d{2})\s+"            # Data
-        r"(\S+)\s+"                     # Canal
-        r"([A-Z0-9\s]+?)\s+"            # Tipo
-        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+"  # Favorecido
-        r"(\d{8})\s+"                   # ISPB
-        r"(\d{3,5})\s+"                 # Agência
-        r"([\d\-]+)\s+"                 # Conta
-        r"([\d.,]+)"                     # Valor
+        r"(\d{2}/\d{2})\s+"           
+        r"(\S+)\s+"                    
+        r"([A-Z0-9\s]+?)\s+"           
+        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+" 
+        r"(\d{8})\s+"                  
+        r"(\d{3,5})\s+"                
+        r"([\d\-]+)\s+"                
+        r"([\d.,]+)"                    
     )
     matches = re.findall(pattern, text, re.MULTILINE)
     if not matches:
@@ -92,9 +79,7 @@ def extract_tabela_favorecidos(text):
     df["Valor (R$)"] = df_full["Valor (raw)"].apply(valor_br_para_float)
     return df
 
-# ===============================
 # Processamento principal
-# ===============================
 if uploaded_file:
     try:
         uploaded_file.seek(0)
@@ -117,14 +102,22 @@ if uploaded_file:
         else:
             # Pré-visualização
             st.subheader("Pré-visualização das tabelas encontradas")
+
             if listas_transacoes:
-                preview_t = pd.concat(listas_transacoes, ignore_index=True)
+                df_transacoes = pd.concat(listas_transacoes, ignore_index=True)
                 st.write("Transações (amostra):")
-                st.dataframe(preview_t)
+                st.dataframe(df_transacoes)
+                # Soma no Streamlit
+                total_transacoes = df_transacoes["Valor (R$)"].sum()
+                st.info(f"💰 Total Transações: R$ {total_transacoes:,.2f}")
+
             if listas_favorecidos:
-                preview_f = pd.concat(listas_favorecidos, ignore_index=True)
+                df_favorecidos = pd.concat(listas_favorecidos, ignore_index=True)
                 st.write("Favorecidos (Data | Favorecido | Valor):")
-                st.dataframe(preview_f)
+                st.dataframe(df_favorecidos)
+                # Soma no Streamlit
+                total_favorecidos = df_favorecidos["Valor (R$)"].sum()
+                st.info(f"💰 Total Favorecidos: R$ {total_favorecidos:,.2f}")
 
             # Input para nome do Excel já preenchido com nome do PDF
             default_name = uploaded_file.name.rsplit(".", 1)[0]
@@ -134,16 +127,6 @@ if uploaded_file:
             )
 
             if st.button("Gerar Excel"):
-                if listas_transacoes:
-                    df_transacoes = pd.concat(listas_transacoes, ignore_index=True)
-                else:
-                    df_transacoes = pd.DataFrame(columns=["Data", "Estabelecimento", "Valor (R$)"])
-
-                if listas_favorecidos:
-                    df_favorecidos = pd.concat(listas_favorecidos, ignore_index=True)
-                else:
-                    df_favorecidos = pd.DataFrame(columns=["Data", "Favorecido", "Valor (R$)"])
-
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
                     style = TableStyleInfo(
@@ -155,7 +138,7 @@ if uploaded_file:
                     )
 
                     # --- Transações ---
-                    if not df_transacoes.empty:
+                    if listas_transacoes:
                         sheet_name = "Transacoes"
                         df_transacoes.to_excel(writer, sheet_name=sheet_name, index=False)
                         ws = writer.book[sheet_name]
@@ -165,17 +148,17 @@ if uploaded_file:
                         tabela = Table(displayName="TabelaTransacoes", ref=ref)
                         tabela.tableStyleInfo = style
                         ws.add_table(tabela)
-                        # formatar coluna Valor
+                        # Coluna valor numérica
                         for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
                             for cell in row:
                                 cell.number_format = '#,##0.00'
-                        # Adicionar linha de total
+                        # Linha TOTAL
                         ws.cell(row=max_row + 1, column=max_col - 1, value="TOTAL")
                         ws.cell(row=max_row + 1, column=max_col, value=f"=SUM({get_column_letter(max_col)}2:{get_column_letter(max_col)}{max_row})")
                         ws.cell(row=max_row + 1, column=max_col).number_format = '#,##0.00'
 
                     # --- Favorecidos ---
-                    if not df_favorecidos.empty:
+                    if listas_favorecidos:
                         sheet_name = "Favorecidos"
                         df_favorecidos.to_excel(writer, sheet_name=sheet_name, index=False)
                         ws = writer.book[sheet_name]
@@ -185,11 +168,9 @@ if uploaded_file:
                         tabela = Table(displayName="TabelaFavorecidos", ref=ref)
                         tabela.tableStyleInfo = style
                         ws.add_table(tabela)
-                        # formatar coluna Valor
                         for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
                             for cell in row:
                                 cell.number_format = '#,##0.00'
-                        # Adicionar linha de total
                         ws.cell(row=max_row + 1, column=max_col - 1, value="TOTAL")
                         ws.cell(row=max_row + 1, column=max_col, value=f"=SUM({get_column_letter(max_col)}2:{get_column_letter(max_col)}{max_row})")
                         ws.cell(row=max_row + 1, column=max_col).number_format = '#,##0.00'
