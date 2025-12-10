@@ -82,12 +82,14 @@ def extract_tabela_favorecidos(text):
     return df
 
 def extrair_mes_ano(nome_arquivo):
+    # Espera formato como "JAN 2025" no nome do arquivo
     mes_ano = re.search(r"([A-Z]{3})\s*(\d{4})", nome_arquivo.upper())
     if mes_ano:
         mes_abrev, ano = mes_ano.groups()
         try:
             mes = datetime.strptime(mes_abrev, "%b").month
         except:
+            # fallback se não reconhecer a abreviação
             meses = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
             mes = meses.index(mes_abrev)+1
         return datetime(int(ano), mes, 1)
@@ -165,7 +167,7 @@ if uploaded_file:
                 total_geral = df_excel["Valor"].sum()
                 df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
 
-                # Salvar Excel
+                # Salvar
                 sheet_name = "Fatura"
                 df_excel.to_excel(writer, sheet_name=sheet_name, index=False)
                 ws = writer.book[sheet_name]
@@ -189,7 +191,7 @@ if uploaded_file:
             )
 
             # ================== Enviar para SharePoint ==================
-            if st.button("Enviar total para SharePoint com PDF"):
+            if st.button("Enviar total para SharePoint"):
                 try:
                     # Variáveis de ambiente
                     CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
@@ -210,12 +212,12 @@ if uploaded_file:
                     if not access_token:
                         raise Exception("Erro ao obter token do MS Graph")
 
-                    # SharePoint IDs
-                    SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-08f-28617bc84da1"
+                    # SharePoint
+                    SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
                     LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
 
-                    # 1️⃣ Criar item no SharePoint via Graph
-                    url_item = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+                    url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+
                     payload = {
                         "fields": {
                             "Despesa": f"Despesa Germano {nome_arquivo}",
@@ -225,31 +227,24 @@ if uploaded_file:
                             "pago": "sim"
                         }
                     }
+
                     headers = {
                         "Authorization": f"Bearer {access_token}",
                         "Content-Type": "application/json"
                     }
-                    response_item = requests.post(url_item, headers=headers, json=payload)
-                    if response_item.status_code != 201:
-                        st.error(f"❌ Erro ao criar item no SharePoint: {response_item.status_code} {response_item.text}")
-                    else:
-                        st.success("✅ Total enviado com sucesso para SharePoint")
 
-                        # 2️⃣ Anexar PDF usando SharePoint REST API
-                        item_id = response_item.json()["id"]
-                        url_attach = f"https://devgbsn.sharepoint.com/sites/despesasfamiliares/_api/web/lists(guid'{LIST_ID}')/items({item_id})/AttachmentFiles/add(FileName='{uploaded_file.name}')"
-                        headers_attach = {
-                            "Authorization": f"Bearer {access_token}",
-                            "Accept": "application/json;odata=verbose"
-                        }
-                        response_attach = requests.post(url_attach, headers=headers_attach, data=uploaded_file.getvalue())
-                        if response_attach.status_code in [200, 201]:
-                            st.success("✅ PDF anexado com sucesso ao item")
-                        else:
-                            st.error(f"❌ Erro ao anexar PDF: {response_attach.status_code} {response_attach.text}")
+                    response = requests.post(url, headers=headers, json=payload)
+
+                    if response.status_code == 201:
+                        st.success("✅ Total enviado com sucesso para SharePoint")
+                    else:
+                        st.error(f"❌ Erro ao enviar para SharePoint: {response.status_code} {response.text}")
 
                 except Exception as e:
                     st.error(f"Erro na integração SharePoint: {e}")
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
+
+
