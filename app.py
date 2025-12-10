@@ -13,7 +13,7 @@ from openpyxl.utils import get_column_letter
 # Configuração da página
 # ===============================
 st.set_page_config(page_title="Extrair Fatura para Excel", layout="wide")
-st.title("Extrair Débitos da Fatura (com Tabelas e valores numéricos)")
+st.title("Extrair Débitos da Fatura (com Tabelas, valores e totais)")
 
 # ===============================
 # Upload do PDF
@@ -169,6 +169,10 @@ if uploaded_file:
                         for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
                             for cell in row:
                                 cell.number_format = '#,##0.00'
+                        # Adicionar linha de total
+                        ws.cell(row=max_row + 1, column=max_col - 1, value="TOTAL")
+                        ws.cell(row=max_row + 1, column=max_col, value=f"=SUM({get_column_letter(max_col)}2:{get_column_letter(max_col)}{max_row})")
+                        ws.cell(row=max_row + 1, column=max_col).number_format = '#,##0.00'
 
                     # --- Favorecidos ---
                     if not df_favorecidos.empty:
@@ -185,6 +189,10 @@ if uploaded_file:
                         for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
                             for cell in row:
                                 cell.number_format = '#,##0.00'
+                        # Adicionar linha de total
+                        ws.cell(row=max_row + 1, column=max_col - 1, value="TOTAL")
+                        ws.cell(row=max_row + 1, column=max_col, value=f"=SUM({get_column_letter(max_col)}2:{get_column_letter(max_col)}{max_row})")
+                        ws.cell(row=max_row + 1, column=max_col).number_format = '#,##0.00'
 
                 output.seek(0)
                 st.success("Excel gerado com sucesso — pronto para download.")
