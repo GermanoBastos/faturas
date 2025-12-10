@@ -181,14 +181,15 @@ if uploaded_file:
                 )
 
             if transacoes:
-                st.subheader("Transações")
+                st.subheader("Débitos")
                 st.dataframe(pd.concat(transacoes, ignore_index=True))
 
             if favorecidos:
-                st.subheader("Favorecidos")
+                st.subheader("PIX Enviados")
                 st.dataframe(pd.concat(favorecidos, ignore_index=True))
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
 
