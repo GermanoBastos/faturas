@@ -1,6 +1,17 @@
-streamlit
-pandas
-openpyxl
-pdfplumber
-pytesseract
-pdf2image
+# Framework para interface web
+streamlit==1.26.0
+
+# Para leitura de PDFs
+pdfplumber==0.9.0
+
+# Manipulação de tabelas e dados
+pandas==2.1.0
+
+# Para salvar arquivos Excel
+openpyxl==3.1.2
+
+# Dependência opcional para manipulação de PDF
+PyPDF2==3.1.0
+
+# Dependência opcional para lidar com uploads maiores
+python-magic==0.4.27
