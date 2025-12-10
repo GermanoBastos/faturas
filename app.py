@@ -6,17 +6,16 @@ from io import BytesIO
 from pdf2image import convert_from_bytes
 import pytesseract
 import string
-from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
 import os
 import msal
 import requests
 
-# ================== CONFIGURAÇÃO DA PÁGINA ==================
 st.set_page_config(page_title="Extrair Fatura para Excel/SharePoint", layout="wide")
-st.title("Extrair Débitos da Fatura (com Totais, Excel e SharePoint)")
+st.title("Extrair Débitos e PIX - Excel + SharePoint")
 
-# ================== FUNÇÕES AUXILIARES ==================
+# ---------------- Funções Auxiliares ----------------
 def sanitize_filename(name):
     valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
     return "".join(c for c in name if c in valid_chars).strip() or "fatura_extraida"
@@ -77,7 +76,7 @@ def extract_tabela_favorecidos(text):
     df["Valor (R$)"] = df_full["Valor (raw)"].apply(valor_br_para_float)
     return df
 
-# ================== UPLOAD DO PDF ==================
+# ---------------- Upload ----------------
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 if uploaded_file:
@@ -100,9 +99,7 @@ if uploaded_file:
         if not listas_transacoes and not listas_favorecidos:
             st.warning("Nenhuma tabela reconhecida no PDF.")
         else:
-            # ---------- Pré-visualização ----------
-            st.subheader("Débitos e envios de PIX")
-
+            st.subheader("Pré-visualização")
             total_debitos = 0.0
             total_pix = 0.0
 
@@ -111,75 +108,45 @@ if uploaded_file:
                 st.write("Débitos:")
                 st.dataframe(df_transacoes)
                 total_debitos = df_transacoes["Valor (R$)"].sum()
-                st.info(f"💰 Total de Débitos: R$ {total_debitos:,.2f}")
 
             if listas_favorecidos:
                 df_favorecidos = pd.concat(listas_favorecidos, ignore_index=True)
                 st.write("Envios de PIX:")
                 st.dataframe(df_favorecidos)
                 total_pix = df_favorecidos["Valor (R$)"].sum()
-                st.info(f"💰 Total de Envios de PIX: R$ {total_pix:,.2f}")
 
             total_geral = total_debitos + total_pix
 
-            # ---------- Gerar Excel ----------
+            # ---------- Excel ----------
             default_name = uploaded_file.name.rsplit(".", 1)[0]
-            nome_arquivo = st.text_input(
-                "Nome do arquivo Excel (sem .xlsx)",
-                value=default_name
-            )
+            nome_arquivo = st.text_input("Nome do arquivo Excel (sem .xlsx)", value=default_name)
 
             if st.button("Gerar Excel"):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    style = TableStyleInfo(
-                        name="TableStyleMedium9",
-                        showFirstColumn=False,
-                        showLastColumn=False,
-                        showRowStripes=True,
-                        showColumnStripes=False
-                    )
+                    # Aba única "Fatura"
+                    sheet_name = "Fatura"
+                    start_row = 0
 
-                    # Transações
+                    # Débitos
                     if listas_transacoes:
-                        sheet_name = "Transacoes"
-                        df_transacoes.to_excel(writer, sheet_name=sheet_name, index=False)
-                        ws = writer.book[sheet_name]
-                        max_row = ws.max_row
-                        max_col = ws.max_column
-                        ref = f"A1:{get_column_letter(max_col)}{max_row}"
-                        tabela = Table(displayName="TabelaTransacoes", ref=ref)
-                        tabela.tableStyleInfo = style
-                        ws.add_table(tabela)
+                        df_transacoes.to_excel(writer, sheet_name=sheet_name, index=False, startrow=start_row)
+                        start_row += len(df_transacoes) + 3  # espaço entre tabelas
 
-                    # Favorecidos
+                    # PIX
                     if listas_favorecidos:
-                        sheet_name = "Favorecidos"
-                        df_favorecidos.to_excel(writer, sheet_name=sheet_name, index=False)
-                        ws = writer.book[sheet_name]
-                        max_row = ws.max_row
-                        max_col = ws.max_column
-                        ref = f"A1:{get_column_letter(max_col)}{max_row}"
-                        tabela = Table(displayName="TabelaFavorecidos", ref=ref)
-                        tabela.tableStyleInfo = style
-                        ws.add_table(tabela)
+                        df_favorecidos.to_excel(writer, sheet_name=sheet_name, index=False, startrow=start_row)
+                        start_row += len(df_favorecidos) + 3
 
-                    # Aba Totais
+                    # Totais
                     df_totais = pd.DataFrame({
                         "Tipo": ["Débitos", "PIX", "Total Geral"],
                         "Valor (R$)": [total_debitos, total_pix, total_geral]
                     })
-                    df_totais.to_excel(writer, sheet_name="Totais", index=False)
-                    ws = writer.book["Totais"]
-                    max_row = ws.max_row
-                    max_col = ws.max_column
-                    ref = f"A1:{get_column_letter(max_col)}{max_row}"
-                    tabela = Table(displayName="TabelaTotais", ref=ref)
-                    tabela.tableStyleInfo = style
-                    ws.add_table(tabela)
+                    df_totais.to_excel(writer, sheet_name=sheet_name, index=False, startrow=start_row)
 
                 output.seek(0)
-                st.success("Excel gerado com sucesso — pronto para download.")
+                st.success("✅ Excel gerado com sucesso")
                 st.download_button(
                     label="📥 Baixar Excel",
                     data=output,
@@ -187,14 +154,14 @@ if uploaded_file:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-            # ---------- Enviar total geral para SharePoint ----------
+            # ---------- SharePoint ----------
             if st.button("Enviar total geral para SharePoint"):
                 CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
                 TENANT_ID = os.getenv("AZURE_TENANT_ID")
                 CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
 
                 if not CLIENT_SECRET:
-                    st.error("CLIENT_SECRET não encontrado como variável de ambiente")
+                    st.error("CLIENT_SECRET não encontrado")
                 else:
                     SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
                     LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
@@ -216,7 +183,6 @@ if uploaded_file:
                             "Authorization": f"Bearer {access_token}",
                             "Content-Type": "application/json"
                         }
-
                         payload_total = {
                             "fields": {
                                 "Title": "Total Geral Fatura",
@@ -224,10 +190,9 @@ if uploaded_file:
                                 "Valor": total_geral
                             }
                         }
-
                         response = requests.post(url, headers=headers, json=payload_total)
                         if response.status_code == 201:
-                            st.success(f"✅ Total geral enviado com sucesso: R$ {total_geral:,.2f}")
+                            st.success(f"✅ Total geral enviado: R$ {total_geral:,.2f}")
                         else:
                             st.error("❌ Erro ao enviar para SharePoint")
                             st.text(f"Status: {response.status_code} {response.text}")
