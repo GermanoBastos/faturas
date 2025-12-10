@@ -6,20 +6,16 @@ from io import BytesIO
 from pdf2image import convert_from_bytes
 import pytesseract
 import string
+from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.utils import get_column_letter
 
 # =========================
-# Configurações da página
+# Configuração da página
 # =========================
-st.set_page_config(
-    page_title="Extrair Fatura para Excel",
-    layout="wide"
-)
+st.set_page_config(page_title="Extrair Fatura para Excel", layout="wide")
 st.title("Extrair Débitos e Gerar Excel")
 
-uploaded_file = st.file_uploader(
-    "Escolha o PDF da fatura",
-    type="pdf"
-)
+uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 # =========================
 # Funções utilitárias
@@ -31,7 +27,6 @@ def sanitize_filename(name):
 
 def extract_text_from_pdf(file):
     texts = []
-
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
@@ -49,16 +44,38 @@ def extract_text_from_pdf(file):
 
 
 # =========================
-# Tabela 1 – Débitos
+# Tabela 1 – Transações
 # =========================
 def extract_table_transacoes(text):
-    """
-    Data | Estabelecimento | Valor
-    """
     pattern = (
         r"(\d{2}/\d{2})\s+"
         r"[\d.]+\s+"
         r"(.+?)\s+"
+        r"([\d.,]+)$"
+    )
+    matches = re.findall(pattern, text, re.MULTILINE)
+
+    if matches:
+        return pd.DataFrame(
+            matches,
+            columns=["Data", "Estabelecimento", "Valor (R$)"]
+        )
+    return pd.DataFrame()
+
+
+# =========================
+# Tabela 2 – Favorecidos
+# (Validação completa, saída reduzida)
+# =========================
+def extract_table_favorecidos(text):
+    pattern = (
+        r"(\d{2}/\d{2})\s+"
+        r"[A-Z]+\s+"
+        r"[A-Z\s]+?\s+"
+        r"([A-Z\s]+?)\s+"
+        r"\d{8}\s+"
+        r"\d{3,5}\s+"
+        r"[\d\-]+\s+"
         r"([\d.,]+)$"
     )
 
@@ -67,53 +84,11 @@ def extract_table_transacoes(text):
     if matches:
         return pd.DataFrame(
             matches,
-            columns=["Data", "Estabelecimento", "Valor (R$)"]
+            columns=["Data", "Favorecido", "Valor (R$)"]
         )
 
     return pd.DataFrame()
 
-
-# =========================
-# Tabela 2 – PIX Enviados
-# =========================
-def extract_table_favorecidos(text):
-    """
-    Extrai a tabela completa para validação,
-    mas retorna apenas Data, Favorecido e Valor
-    """
-
-    pattern = (
-        r"(\d{2}/\d{2})\s+"            # Data
-        r"([A-Z]+)\s+"                 # Canal
-        r"([A-Z\s]+?)\s+"              # Tipo
-        r"([A-Z\s]+?)\s+"              # Favorecido
-        r"(\d{8})\s+"                  # ISPB
-        r"(\d{3,5})\s+"                # Agência
-        r"([\d\-]+)\s+"                # Conta
-        r"([\d.,]+)$"                  # Valor
-    )
-
-    matches = re.findall(pattern, text, re.MULTILINE)
-
-    if not matches:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(
-        matches,
-        columns=[
-            "Data",
-            "Canal",
-            "Tipo",
-            "Favorecido",
-            "ISPB",
-            "Agência",
-            "Conta",
-            "Valor (R$)"
-        ]
-    )
-
-    # ✅ Retorna SOMENTE as colunas desejadas
-    return df[["Data", "Favorecido", "Valor (R$)"]]
 
 # =========================
 # Execução principal
@@ -149,27 +124,47 @@ if uploaded_file:
 
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
 
+                    style = TableStyleInfo(
+                        name="TableStyleMedium9",
+                        showFirstColumn=False,
+                        showLastColumn=False,
+                        showRowStripes=True,
+                        showColumnStripes=False
+                    )
+
                     if transacoes:
-                        df_transacoes = pd.concat(
-                            transacoes,
-                            ignore_index=True
+                        df_transacoes = pd.concat(transacoes, ignore_index=True)
+                        sheet = "Transações"
+                        df_transacoes.to_excel(writer, sheet_name=sheet, index=False)
+
+                        ws = writer.book[sheet]
+                        max_col = ws.max_column
+                        max_row = ws.max_row
+                        ref = f"A1:{get_column_letter(max_col)}{max_row}"
+
+                        tabela = Table(
+                            displayName="TabelaTransacoes",
+                            ref=ref
                         )
-                        df_transacoes.to_excel(
-                            writer,
-                            sheet_name="Transações",
-                            index=False
-                        )
+                        tabela.tableStyleInfo = style
+                        ws.add_table(tabela)
 
                     if favorecidos:
-                        df_favorecidos = pd.concat(
-                            favorecidos,
-                            ignore_index=True
+                        df_favorecidos = pd.concat(favorecidos, ignore_index=True)
+                        sheet = "Favorecidos"
+                        df_favorecidos.to_excel(writer, sheet_name=sheet, index=False)
+
+                        ws = writer.book[sheet]
+                        max_col = ws.max_column
+                        max_row = ws.max_row
+                        ref = f"A1:{get_column_letter(max_col)}{max_row}"
+
+                        tabela = Table(
+                            displayName="TabelaFavorecidos",
+                            ref=ref
                         )
-                        df_favorecidos.to_excel(
-                            writer,
-                            sheet_name="Favorecidos",
-                            index=False
-                        )
+                        tabela.tableStyleInfo = style
+                        ws.add_table(tabela)
 
                 output.seek(0)
 
@@ -181,15 +176,12 @@ if uploaded_file:
                 )
 
             if transacoes:
-                st.subheader("Débitos")
+                st.subheader("Transações")
                 st.dataframe(pd.concat(transacoes, ignore_index=True))
 
             if favorecidos:
-                st.subheader("PIX Enviados")
+                st.subheader("Favorecidos")
                 st.dataframe(pd.concat(favorecidos, ignore_index=True))
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
-
-
-
