@@ -68,3 +68,4 @@ else:
     print("❌ Erro ao inserir item")
     print("Status:", response.status_code)
     print(response.text)
+
