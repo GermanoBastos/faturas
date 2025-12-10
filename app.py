@@ -4,39 +4,41 @@ import pdfplumber
 import re
 import string
 import requests
-import msal
 from io import BytesIO
 from pdf2image import convert_from_bytes
 import pytesseract
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
+from msal import ConfidentialClientApplication
 
 # =====================================================
 # CONFIGURAÇÕES SHAREPOINT / GRAPH
 # =====================================================
-CLIENT_ID = "4039ce1c-ee58-4b19-bf86-db64da445fe1"
-TENANT_ID = "02543ce8-b773-43d0-9cf1-298729881b0d"
+CLIENT_ID = "4039ce1c-ee58-4b19-bf86-db64-4a445fe1"  # Seu Client ID
+TENANT_ID = "02543ce8-b773-43d0-9cf1-298729881b0d"   # Seu Tenant ID
+CLIENT_SECRET = "Km28Q~MdUICKDDzA86z1NmOQm0EP9wZlPWoRRb-v"                  # Segredo do app no Azure
 
 SITE_ID = (
     "devgbsn.sharepoint.com,"
     "351e9978-140f-427e-a87d-332f6ce67a46,"
     "fc4e159a-5954-442f-a08f-28617bc84da1"
 )
-
 LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-SCOPES = ["Sites.ReadWrite.All"]
 
 # =====================================================
 # FUNÇÕES SHAREPOINT
 # =====================================================
 def get_token():
-    app = msal.PublicClientApplication(client_id=CLIENT_ID, authority=AUTHORITY)
-    result = app.acquire_token_interactive(scopes=SCOPES)
-    if "access_token" not in result:
-        raise Exception(result)
-    return result["access_token"]
+    app = ConfidentialClientApplication(
+        client_id=CLIENT_ID,
+        client_credential=CLIENT_SECRET,
+        authority=f"https://login.microsoftonline.com/{TENANT_ID}"
+    )
+    token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    access_token = token.get("access_token")
+    if not access_token:
+        raise Exception("Não foi possível obter o token.")
+    return access_token
 
 def inserir_sharepoint(token, despesa, valor):
     url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
@@ -53,7 +55,7 @@ def inserir_sharepoint(token, despesa, valor):
     }
     r = requests.post(url, headers=headers, json=payload)
     if r.status_code != 201:
-        raise Exception(r.text)
+        raise Exception(f"Erro ao enviar para SharePoint: {r.text}")
 
 # =====================================================
 # STREAMLIT CONFIG
@@ -93,9 +95,6 @@ def extract_text_from_pdf(file):
             texts.append(pytesseract.image_to_string(img, lang="por"))
     return texts
 
-# =====================================================
-# EXTRAÇÃO TABELAS
-# =====================================================
 def extract_transacoes(text):
     pattern = r"(\d{2}/\d{2})\s+[\d.]+\s+(.+?)\s+([\d.,]+)$"
     m = re.findall(pattern, text, re.MULTILINE)
@@ -110,7 +109,7 @@ def extract_favorecidos(text):
         r"(\d{2}/\d{2})\s+(\S+)\s+([A-Z0-9\s]+?)\s+"
         r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+\d+\s+\d+\s+[\d\-]+\s+([\d.,]+)"
     )
-    m = re.findall(pattern, text, re.MULTILINE)
+    m = re.findall(pattern, re.MULTILINE)
     if not m:
         return pd.DataFrame()
     df = pd.DataFrame(m, columns=["Data", "Canal", "Tipo", "Favorecido", "Valor"])
