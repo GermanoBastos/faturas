@@ -7,7 +7,7 @@ from pdf2image import convert_from_bytes
 import pytesseract
 
 st.set_page_config(page_title="Extrair Fatura para Excel", layout="wide")
-st.title("Extrair Tabela de Fatura e Gerar Excel (3 colunas)")
+st.title("Extrair Débitos e Gerar Excel")
 
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
@@ -73,3 +73,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Ocorreu um erro: {e}")
+
