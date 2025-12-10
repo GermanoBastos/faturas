@@ -78,7 +78,7 @@ def extract_table_transacoes(text):
 # =========================
 def extract_table_favorecidos(text):
     """
-    Data | Canal | Tipo | Favorecido | ISPB | Agência | Conta | Valor
+    Data | Favorecido | Valor
     """
 
     pattern = (
@@ -182,4 +182,5 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
