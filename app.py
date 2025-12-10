@@ -120,6 +120,8 @@ if uploaded_file:
                 total_pix = df_favorecidos["Valor (R$)"].sum()
                 st.info(f"💰 Total de Envios de PIX: R$ {total_pix:,.2f}")
 
+            total_geral = total_debitos + total_pix
+
             # ---------- Gerar Excel ----------
             default_name = uploaded_file.name.rsplit(".", 1)[0]
             nome_arquivo = st.text_input(
@@ -162,6 +164,20 @@ if uploaded_file:
                         tabela.tableStyleInfo = style
                         ws.add_table(tabela)
 
+                    # Aba Totais
+                    df_totais = pd.DataFrame({
+                        "Tipo": ["Débitos", "PIX", "Total Geral"],
+                        "Valor (R$)": [total_debitos, total_pix, total_geral]
+                    })
+                    df_totais.to_excel(writer, sheet_name="Totais", index=False)
+                    ws = writer.book["Totais"]
+                    max_row = ws.max_row
+                    max_col = ws.max_column
+                    ref = f"A1:{get_column_letter(max_col)}{max_row}"
+                    tabela = Table(displayName="TabelaTotais", ref=ref)
+                    tabela.tableStyleInfo = style
+                    ws.add_table(tabela)
+
                 output.seek(0)
                 st.success("Excel gerado com sucesso — pronto para download.")
                 st.download_button(
@@ -171,9 +187,8 @@ if uploaded_file:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-            # ---------- Enviar totais para SharePoint ----------
-            if st.button("Enviar totais para SharePoint"):
-                # ================== CONFIGURAÇÃO SHAREPOINT ==================
+            # ---------- Enviar total geral para SharePoint ----------
+            if st.button("Enviar total geral para SharePoint"):
                 CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
                 TENANT_ID = os.getenv("AZURE_TENANT_ID")
                 CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
@@ -184,15 +199,13 @@ if uploaded_file:
                     SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
                     LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
 
-                    # Criar app MSAL
-                    app = msal.ConfidentialClientApplication(
+                    app_msal = msal.ConfidentialClientApplication(
                         client_id=CLIENT_ID,
                         client_credential=CLIENT_SECRET,
                         authority=f"https://login.microsoftonline.com/{TENANT_ID}"
                     )
 
-                    # Obter token
-                    token_response = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+                    token_response = app_msal.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
                     access_token = token_response.get("access_token")
 
                     if not access_token:
@@ -204,32 +217,20 @@ if uploaded_file:
                             "Content-Type": "application/json"
                         }
 
-                        # Inserir Débitos
-                        payload_debitos = {
+                        payload_total = {
                             "fields": {
-                                "Title": "Total Débitos",
-                                "Despesa": "Débitos",
-                                "Valor": total_debitos
+                                "Title": "Total Geral Fatura",
+                                "Despesa": "Total Geral",
+                                "Valor": total_geral
                             }
                         }
-                        response_debitos = requests.post(url, headers=headers, json=payload_debitos)
 
-                        # Inserir PIX
-                        payload_pix = {
-                            "fields": {
-                                "Title": "Total PIX",
-                                "Despesa": "PIX",
-                                "Valor": total_pix
-                            }
-                        }
-                        response_pix = requests.post(url, headers=headers, json=payload_pix)
-
-                        if response_debitos.status_code == 201 and response_pix.status_code == 201:
-                            st.success("✅ Totais enviados com sucesso para o SharePoint")
+                        response = requests.post(url, headers=headers, json=payload_total)
+                        if response.status_code == 201:
+                            st.success(f"✅ Total geral enviado com sucesso: R$ {total_geral:,.2f}")
                         else:
                             st.error("❌ Erro ao enviar para SharePoint")
-                            st.text(f"Débitos: {response_debitos.status_code} {response_debitos.text}")
-                            st.text(f"PIX: {response_pix.status_code} {response_pix.text}")
+                            st.text(f"Status: {response.status_code} {response.text}")
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
