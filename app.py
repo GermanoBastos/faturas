@@ -105,7 +105,7 @@ if uploaded_file:
 
             if listas_transacoes:
                 df_transacoes = pd.concat(listas_transacoes, ignore_index=True)
-                st.write("Transações (amostra):")
+                st.write("Débitos:")
                 st.dataframe(df_transacoes)
                 # Soma no Streamlit
                 total_transacoes = df_transacoes["Valor (R$)"].sum()
@@ -113,7 +113,7 @@ if uploaded_file:
 
             if listas_favorecidos:
                 df_favorecidos = pd.concat(listas_favorecidos, ignore_index=True)
-                st.write("Favorecidos (Data | Favorecido | Valor):")
+                st.write("Envios de PIX:")
                 st.dataframe(df_favorecidos)
                 # Soma no Streamlit
                 total_favorecidos = df_favorecidos["Valor (R$)"].sum()
@@ -186,4 +186,5 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
