@@ -83,12 +83,14 @@ def extract_tabela_favorecidos(text):
     return df
 
 def extrair_mes_ano(nome_arquivo):
+    # Espera formato como "JAN 2025" no nome do arquivo
     mes_ano = re.search(r"([A-Z]{3})\s*(\d{4})", nome_arquivo.upper())
     if mes_ano:
         mes_abrev, ano = mes_ano.groups()
         try:
             mes = datetime.strptime(mes_abrev, "%b").month
         except:
+            # fallback se não reconhecer a abreviação
             meses = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
             mes = meses.index(mes_abrev)+1
         return datetime(int(ano), mes, 1)
@@ -131,8 +133,10 @@ if uploaded_file:
                 total_favorecidos = df_favorecidos["Valor (R$)"].sum()
                 st.info(f"💰 Total de Envios de PIX: R$ {total_favorecidos:,.2f}")
 
+            # Nome do arquivo
             default_name = uploaded_file.name.rsplit(".",1)[0]
             nome_arquivo = st.text_input("Nome do arquivo Excel (sem .xlsx)", value=default_name)
+
             vencimento = extrair_mes_ano(nome_arquivo)
 
             # ================== Preparar Excel ==================
@@ -160,9 +164,11 @@ if uploaded_file:
                 else:
                     df_excel = pd.DataFrame(columns=["Data","Descrição","Valor"])
 
+                # Linha TOTAL
                 total_geral = df_excel["Valor"].sum()
                 df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
 
+                # Salvar
                 sheet_name = "Fatura"
                 df_excel.to_excel(writer, sheet_name=sheet_name, index=False)
                 ws = writer.book[sheet_name]
@@ -188,6 +194,7 @@ if uploaded_file:
             # ================== Enviar para SharePoint ==================
             if st.button("Enviar total para SharePoint"):
                 try:
+                    # Variáveis de ambiente
                     CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
                     TENANT_ID = os.getenv("AZURE_TENANT_ID")
                     CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
@@ -206,9 +213,11 @@ if uploaded_file:
                     if not access_token:
                         raise Exception("Erro ao obter token do MS Graph")
 
+                    # SharePoint
                     SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
                     LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-                    url_item = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+
+                    url_create_item = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
 
                     payload_item = {
                         "fields": {
@@ -225,25 +234,29 @@ if uploaded_file:
                         "Content-Type": "application/json"
                     }
 
-                    resp_item = requests.post(url_item, headers=headers, json=payload_item)
-                    if resp_item.status_code != 201:
-                        st.error(f"❌ Erro ao criar item: {resp_item.status_code} {resp_item.text}")
+                    # Criar item
+                    response_item = requests.post(url_create_item, headers=headers, json=payload_item)
+                    if response_item.status_code != 201:
+                        st.error(f"❌ Erro ao criar item: {response_item.status_code} {response_item.text}")
                     else:
-                        item_id = resp_item.json()["id"]
-                        st.success(f"✅ Item criado no SharePoint, ID: {item_id}")
+                        st.success("✅ Item criado com sucesso no SharePoint")
+                        item_id = response_item.json()["id"]
 
-                        # --- Anexar PDF ---
-                        uploaded_file.seek(0)
-                        pdf_bytes = uploaded_file.read()
-                        pdf_name = uploaded_file.name
-                        pdf_encoded = base64.b64encode(pdf_bytes).decode("utf-8")
-                        payload_attach = {"name": pdf_name, "contentBytes": pdf_encoded}
-                        url_attach = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/attachments"
-                        resp_attach = requests.post(url_attach, headers=headers, json=payload_attach)
-                        if resp_attach.status_code == 201:
-                            st.success("✅ PDF anexado com sucesso!")
+                        # Enviar anexo
+                        arquivo_bytes = uploaded_file.read()
+                        arquivo_base64 = base64.b64encode(arquivo_bytes).decode("utf-8")
+                        url_attachment = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/attachments"
+
+                        payload_attachment = {
+                            "name": uploaded_file.name,
+                            "contentBytes": arquivo_base64
+                        }
+
+                        response_attach = requests.post(url_attachment, headers=headers, json=payload_attachment)
+                        if response_attach.status_code == 201:
+                            st.success("✅ PDF anexado com sucesso ao item")
                         else:
-                            st.error(f"❌ Erro ao anexar PDF: {resp_attach.status_code} {resp_attach.text}")
+                            st.error(f"❌ Erro ao anexar PDF: {response_attach.status_code} {response_attach.text}")
 
                 except Exception as e:
                     st.error(f"Erro na integração SharePoint: {e}")
