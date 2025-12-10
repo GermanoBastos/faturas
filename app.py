@@ -11,78 +11,116 @@ import string
 st.set_page_config(page_title="Extrair Fatura para Excel", layout="wide")
 st.title("Extrair Débitos e Gerar Excel")
 
-# Upload do PDF
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
+
 def extract_text_from_pdf(file):
-    """Extrai texto do PDF; se não houver, usa OCR"""
     texts = []
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
             if page_text:
                 texts.append(page_text)
-    # Se nenhuma página tiver texto, tenta OCR
+
     if not texts:
         st.info("PDF sem texto detectável. Tentando OCR...")
         file.seek(0)
         images = convert_from_bytes(file.read())
         for img in images:
-            text = pytesseract.image_to_string(img)
-            texts.append(text)
+            texts.append(pytesseract.image_to_string(img))
+
     return texts
 
-def extract_table_from_text(text):
+
+def extract_table_transacoes(text):
     """
-    Extrai tabela de transações do texto usando regex.
-    Colunas: Data, Estabelecimento, Valor (ignora Número do Cartão)
+    Tabela 1: Data | Estabelecimento | Valor
     """
     pattern = r"(\d{2}/\d{2})\s+[\d.]+\s+(.+?)\s+([\d.,]+)$"
     matches = re.findall(pattern, text, re.MULTILINE)
-    if matches:
-        df = pd.DataFrame(matches, columns=["Data", "Estabelecimento", "Valor (R$)"])
-        return df
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame(matches, columns=["Data", "Estabelecimento", "Valor (R$)"])
+
+
+def extract_table_favorecidos(text):
+    """
+    Tabela 2: Data | Favorecido | Valor
+    Exemplo esperado:
+    12/09 PAGAMENTO JOAO SILVA 1.250,00
+    """
+    pattern = r"(\d{2}/\d{2})\s+(.+?)\s+([\d.,]+)$"
+    matches = re.findall(pattern, text, re.MULTILINE)
+    return pd.DataFrame(matches, columns=["Data", "Favorecido", "Valor (R$)"])
+
 
 def sanitize_filename(name):
-    """Remove caracteres inválidos para nome de arquivo"""
     valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
     return "".join(c for c in name if c in valid_chars).strip() or "fatura_extraida"
+
 
 if uploaded_file:
     try:
         uploaded_file.seek(0)
         texts = extract_text_from_pdf(uploaded_file)
-        all_tables = [extract_table_from_text(t) for t in texts if not extract_table_from_text(t).empty]
 
-        if all_tables:
-            # Concatenar todas as tabelas extraídas
-            final_df = pd.concat(all_tables, ignore_index=True)
+        tabelas_transacoes = []
+        tabelas_favorecidos = []
 
-            # Pedir nome do arquivo para o usuário
-            file_name_input = st.text_input("Digite o nome do arquivo Excel (sem extensão)", "fatura_extraida")
-            excel_file_name = sanitize_filename(file_name_input) + ".xlsx"
+        for t in texts:
+            df1 = extract_table_transacoes(t)
+            df2 = extract_table_favorecidos(t)
 
-            # Gerar Excel
-            output = BytesIO()
-            final_df.to_excel(output, index=False, engine='openpyxl')
-            output.seek(0)
+            if not df1.empty:
+                tabelas_transacoes.append(df1)
 
-            # Botão de download
-            st.download_button(
-                label="Clique para baixar o Excel",
-                data=output,
-                file_name=excel_file_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            if not df2.empty:
+                tabelas_favorecidos.append(df2)
+
+        if tabelas_transacoes or tabelas_favorecidos:
+
+            nome_arquivo = st.text_input(
+                "Digite o nome do arquivo Excel (sem extensão)",
+                "fatura_extraida"
             )
 
-            # Exibir tabela no app
-            st.subheader("Tabela extraída:")
-            st.dataframe(final_df)
+            if st.button("Gerar Excel"):
+                output = BytesIO()
+
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    if tabelas_transacoes:
+                        df_transacoes = pd.concat(tabelas_transacoes, ignore_index=True)
+                        df_transacoes.to_excel(
+                            writer,
+                            sheet_name="Transações",
+                            index=False
+                        )
+
+                    if tabelas_favorecidos:
+                        df_favorecidos = pd.concat(tabelas_favorecidos, ignore_index=True)
+                        df_favorecidos.to_excel(
+                            writer,
+                            sheet_name="Favorecidos",
+                            index=False
+                        )
+
+                output.seek(0)
+
+                st.download_button(
+                    label="Baixar Excel",
+                    data=output,
+                    file_name=sanitize_filename(nome_arquivo) + ".xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            if tabelas_transacoes:
+                st.subheader("Tabela de Transações")
+                st.dataframe(pd.concat(tabelas_transacoes, ignore_index=True))
+
+            if tabelas_favorecidos:
+                st.subheader("Tabela de Favorecidos")
+                st.dataframe(pd.concat(tabelas_favorecidos, ignore_index=True))
 
         else:
-            st.warning("Nenhuma tabela de transações encontrada no PDF.")
+            st.warning("Nenhuma tabela encontrada no PDF.")
 
     except Exception as e:
         st.error(f"Ocorreu um erro: {e}")
