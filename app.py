@@ -49,7 +49,7 @@ def extract_text_from_pdf(file):
 
 
 # =========================
-# Tabela 1 – Transações
+# Tabela 1 – Débitos
 # =========================
 def extract_table_transacoes(text):
     """
@@ -74,7 +74,7 @@ def extract_table_transacoes(text):
 
 
 # =========================
-# Tabela 2 – Favorecidos
+# Tabela 2 – PIX Enviados
 # =========================
 def extract_table_favorecidos(text):
     """
@@ -190,4 +190,5 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
 
