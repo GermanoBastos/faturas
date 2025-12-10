@@ -220,7 +220,7 @@ if uploaded_file:
 
                     payload = {
                         "fields": {
-                            "Title": f"Fatura {nome_arquivo}",
+                            "Despesa Germano": f"Fatura {nome_arquivo}",
                             "Valor": float(total_geral),
                             "Vencimento": vencimento.strftime("%m/%d/%Y")
                         }
@@ -243,3 +243,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
