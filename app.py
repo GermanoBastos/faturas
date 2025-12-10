@@ -99,12 +99,7 @@ def extract_table_favorecidos(text):
             matches,
             columns=[
                 "Data",
-                "Canal",
-                "Tipo",
                 "Favorecido",
-                "ISPB",
-                "Agência",
-                "Conta",
                 "Valor (R$)"
             ]
         )
@@ -187,3 +182,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
+
