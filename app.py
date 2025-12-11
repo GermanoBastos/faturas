@@ -149,3 +149,132 @@ if uploaded_file:
 
         total_pix = st.session_state.df_favorecidos["Valor (R$)"].sum()
         st.info(f"💰 Total PIX: R$ {total_pix:,.2f}")
+
+# ================== Nome do arquivo ==================
+default_name = uploaded_file.name.rsplit(".",1)[0]
+nome_arquivo = st.text_input(
+    "Nome do arquivo Excel (sem .xlsx)",
+    value=default_name
+)
+
+vencimento = extrair_mes_ano(nome_arquivo)
+
+# ================== Preparar Excel ==================
+output = BytesIO()
+
+with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    style = TableStyleInfo(
+        name="TableStyleMedium9",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False
+    )
+
+    df_excel_list = []
+
+    if not st.session_state.df_transacoes.empty:
+        df_trans_excel = (
+            st.session_state.df_transacoes
+            .rename(columns={
+                "Estabelecimento":"Descrição",
+                "Valor (R$)":"Valor"
+            })[["Data","Descrição","Valor"]]
+        )
+        df_excel_list.append(df_trans_excel)
+
+    if not st.session_state.df_favorecidos.empty:
+        df_fav_excel = (
+            st.session_state.df_favorecidos
+            .rename(columns={
+                "Favorecido":"Descrição",
+                "Valor (R$)":"Valor"
+            })[["Data","Descrição","Valor"]]
+        )
+        df_excel_list.append(df_fav_excel)
+
+    if df_excel_list:
+        df_excel = pd.concat(df_excel_list, ignore_index=True)
+    else:
+        df_excel = pd.DataFrame(columns=["Data","Descrição","Valor"])
+
+    total_geral = df_excel["Valor"].sum()
+    df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
+
+    sheet_name = "Fatura"
+    df_excel.to_excel(writer, sheet_name=sheet_name, index=False)
+    ws = writer.book[sheet_name]
+
+    ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
+    tabela = Table(displayName="TabelaFatura", ref=ref)
+    tabela.tableStyleInfo = style
+    ws.add_table(tabela)
+
+    for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
+        for cell in row:
+            cell.number_format = '#,##0.00'
+
+output.seek(0)
+
+st.success("✅ Excel gerado com sucesso — pronto para download.")
+
+st.download_button(
+    label="📥 Baixar Excel",
+    data=output,
+    file_name=sanitize_filename(nome_arquivo)+".xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# ================== Enviar para SharePoint ==================
+if st.button("Enviar total para SharePoint"):
+    try:
+        CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
+        TENANT_ID = os.getenv("AZURE_TENANT_ID")
+        CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
+
+        app = msal.ConfidentialClientApplication(
+            client_id=CLIENT_ID,
+            client_credential=CLIENT_SECRET,
+            authority=f"https://login.microsoftonline.com/{TENANT_ID}"
+        )
+
+        token = app.acquire_token_for_client(
+            scopes=["https://graph.microsoft.com/.default"]
+        )
+
+        access_token = token.get("access_token")
+        if not access_token:
+            raise Exception("Erro ao obter token do MS Graph")
+
+        SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+        LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+
+        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+
+        payload = {
+            "fields": {
+                "Despesa": f"Despesa Germano {nome_arquivo}",
+                "Valor": float(total_geral),
+                "Vencimento": vencimento.strftime("%m/%d/%Y"),
+                "QuemPagou": "Germano",
+                "pago": "sim"
+            }
+        }
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+
+        if response.status_code == 201:
+            st.success("✅ Total enviado com sucesso para SharePoint")
+        else:
+            st.error(
+                f"❌ Erro ao enviar para SharePoint: "
+                f"{response.status_code} {response.text}"
+            )
+
+    except Exception as e:
+        st.error(f"Erro na integração SharePoint: {e}")
