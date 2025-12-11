@@ -53,7 +53,7 @@ def extract_tabela_transacoes(text):
     matches = re.findall(pattern, text, re.MULTILINE)
     if not matches:
         return pd.DataFrame()
-    df = pd.DataFrame(matches, columns=["Data","Estabelecimento","Valor (R$)"])
+    df = pd.DataFrame(matches, columns=["Data", "Estabelecimento", "Valor (R$)"])
     df["Valor (R$)"] = df["Valor (R$)"].apply(valor_br_para_float)
     return df
 
@@ -79,21 +79,28 @@ def extrair_mes_ano(nome_arquivo):
     mes_ano = re.search(r"([A-Z]{3})\s*(\d{4})", nome_arquivo.upper())
     if mes_ano:
         mes_abrev, ano = mes_ano.groups()
+        meses = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
         try:
-            mes = datetime.strptime(mes_abrev, "%b").month
+            mes = meses.index(mes_abrev) + 1
         except:
-            meses = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
-            mes = meses.index(mes_abrev)+1
+            mes = 1
         return datetime(int(ano), mes, 1)
     return datetime.now()
 
 # ================== Processamento ==================
 if uploaded_file:
+
     uploaded_file.seek(0)
-    texts = extract_text_from_pdf(uploaded_file)
+
+    # 🔒 guardar nome do arquivo no session_state
+    if hasattr(uploaded_file, "name"):
+        st.session_state["uploaded_filename"] = uploaded_file.name
 
     if "df_transacoes" not in st.session_state:
-        listas_transacoes, listas_favorecidos = [], []
+        texts = extract_text_from_pdf(uploaded_file)
+
+        listas_transacoes = []
+        listas_favorecidos = []
 
         for t in texts:
             dt = extract_tabela_transacoes(t)
@@ -114,11 +121,11 @@ if uploaded_file:
             if listas_favorecidos else pd.DataFrame()
         )
 
-    st.subheader("Pré-visualização (exclusão manual)")
+    st.subheader("Pré-visualização (excluir linhas manualmente)")
 
     # ================== Débitos ==================
     if not st.session_state.df_transacoes.empty:
-        st.write("Débitos:")
+        st.markdown("### Débitos")
 
         for i, row in st.session_state.df_transacoes.iterrows():
             c1, c2, c3, c4 = st.columns([1,4,2,0.5])
@@ -130,12 +137,12 @@ if uploaded_file:
                 st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
                 st.rerun()
 
-        total = st.session_state.df_transacoes["Valor (R$)"].sum()
-        st.info(f"💰 Total de Débitos: R$ {total:,.2f}")
+        total_transacoes = st.session_state.df_transacoes["Valor (R$)"].sum()
+        st.info(f"💰 Total de Débitos: R$ {total_transacoes:,.2f}")
 
     # ================== PIX ==================
     if not st.session_state.df_favorecidos.empty:
-        st.write("Envios de PIX:")
+        st.markdown("### Envios de PIX")
 
         for i, row in st.session_state.df_favorecidos.iterrows():
             c1, c2, c3, c4 = st.columns([1,4,2,0.5])
@@ -148,133 +155,118 @@ if uploaded_file:
                 st.rerun()
 
         total_pix = st.session_state.df_favorecidos["Valor (R$)"].sum()
-        st.info(f"💰 Total PIX: R$ {total_pix:,.2f}")
+        st.info(f"💰 Total de Envios de PIX: R$ {total_pix:,.2f}")
 
-# ================== Nome do arquivo ==================
-default_name = uploaded_file.name.rsplit(".",1)[0]
-nome_arquivo = st.text_input(
-    "Nome do arquivo Excel (sem .xlsx)",
-    value=default_name
-)
+    # ================== Nome do arquivo ==================
+    original_name = st.session_state.get("uploaded_filename", "fatura_extraida")
+    default_name = original_name.rsplit(".", 1)[0]
 
-vencimento = extrair_mes_ano(nome_arquivo)
-
-# ================== Preparar Excel ==================
-output = BytesIO()
-
-with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    style = TableStyleInfo(
-        name="TableStyleMedium9",
-        showFirstColumn=False,
-        showLastColumn=False,
-        showRowStripes=True,
-        showColumnStripes=False
+    nome_arquivo = st.text_input(
+        "Nome do arquivo Excel (sem .xlsx)",
+        value=default_name
     )
 
-    df_excel_list = []
+    vencimento = extrair_mes_ano(nome_arquivo)
 
-    if not st.session_state.df_transacoes.empty:
-        df_trans_excel = (
-            st.session_state.df_transacoes
-            .rename(columns={
-                "Estabelecimento":"Descrição",
-                "Valor (R$)":"Valor"
-            })[["Data","Descrição","Valor"]]
-        )
-        df_excel_list.append(df_trans_excel)
+    # ================== Preparar Excel ==================
+    output = BytesIO()
 
-    if not st.session_state.df_favorecidos.empty:
-        df_fav_excel = (
-            st.session_state.df_favorecidos
-            .rename(columns={
-                "Favorecido":"Descrição",
-                "Valor (R$)":"Valor"
-            })[["Data","Descrição","Valor"]]
-        )
-        df_excel_list.append(df_fav_excel)
-
-    if df_excel_list:
-        df_excel = pd.concat(df_excel_list, ignore_index=True)
-    else:
-        df_excel = pd.DataFrame(columns=["Data","Descrição","Valor"])
-
-    total_geral = df_excel["Valor"].sum()
-    df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
-
-    sheet_name = "Fatura"
-    df_excel.to_excel(writer, sheet_name=sheet_name, index=False)
-    ws = writer.book[sheet_name]
-
-    ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
-    tabela = Table(displayName="TabelaFatura", ref=ref)
-    tabela.tableStyleInfo = style
-    ws.add_table(tabela)
-
-    for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
-        for cell in row:
-            cell.number_format = '#,##0.00'
-
-output.seek(0)
-
-st.success("✅ Excel gerado com sucesso — pronto para download.")
-
-st.download_button(
-    label="📥 Baixar Excel",
-    data=output,
-    file_name=sanitize_filename(nome_arquivo)+".xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-# ================== Enviar para SharePoint ==================
-if st.button("Enviar total para SharePoint"):
-    try:
-        CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
-        TENANT_ID = os.getenv("AZURE_TENANT_ID")
-        CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
-
-        app = msal.ConfidentialClientApplication(
-            client_id=CLIENT_ID,
-            client_credential=CLIENT_SECRET,
-            authority=f"https://login.microsoftonline.com/{TENANT_ID}"
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        style = TableStyleInfo(
+            name="TableStyleMedium9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False
         )
 
-        token = app.acquire_token_for_client(
-            scopes=["https://graph.microsoft.com/.default"]
-        )
+        df_excel_list = []
 
-        access_token = token.get("access_token")
-        if not access_token:
-            raise Exception("Erro ao obter token do MS Graph")
-
-        SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-        LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-
-        payload = {
-            "fields": {
-                "Despesa": f"Despesa Germano {nome_arquivo}",
-                "Valor": float(total_geral),
-                "Vencimento": vencimento.strftime("%m/%d/%Y"),
-                "QuemPagou": "Germano",
-                "pago": "sim"
-            }
-        }
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-
-        response = requests.post(url, headers=headers, json=payload)
-
-        if response.status_code == 201:
-            st.success("✅ Total enviado com sucesso para SharePoint")
-        else:
-            st.error(
-                f"❌ Erro ao enviar para SharePoint: "
-                f"{response.status_code} {response.text}"
+        if not st.session_state.df_transacoes.empty:
+            df_excel_list.append(
+                st.session_state.df_transacoes
+                .rename(columns={"Estabelecimento":"Descrição","Valor (R$)":"Valor"})
+                [["Data","Descrição","Valor"]]
             )
 
-    except Exception as e:
-        st.error(f"Erro na integração SharePoint: {e}")
+        if not st.session_state.df_favorecidos.empty:
+            df_excel_list.append(
+                st.session_state.df_favorecidos
+                .rename(columns={"Favorecido":"Descrição","Valor (R$)":"Valor"})
+                [["Data","Descrição","Valor"]]
+            )
+
+        df_excel = pd.concat(df_excel_list, ignore_index=True) if df_excel_list else pd.DataFrame(columns=["Data","Descrição","Valor"])
+        total_geral = df_excel["Valor"].sum()
+        df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
+
+        sheet = "Fatura"
+        df_excel.to_excel(writer, sheet_name=sheet, index=False)
+        ws = writer.book[sheet]
+
+        ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
+        tabela = Table(displayName="TabelaFatura", ref=ref)
+        tabela.tableStyleInfo = style
+        ws.add_table(tabela)
+
+        for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
+            for cell in row:
+                cell.number_format = '#,##0.00'
+
+    output.seek(0)
+
+    st.download_button(
+        "📥 Baixar Excel",
+        data=output,
+        file_name=sanitize_filename(nome_arquivo)+".xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    # ================== SharePoint ==================
+    if st.button("Enviar total para SharePoint"):
+        try:
+            app = msal.ConfidentialClientApplication(
+                client_id=os.getenv("AZURE_CLIENT_ID"),
+                client_credential=os.getenv("AZURE_CLIENT_SECRET"),
+                authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
+            )
+
+            token = app.acquire_token_for_client(
+                scopes=["https://graph.microsoft.com/.default"]
+            )
+
+            access_token = token.get("access_token")
+            if not access_token:
+                raise Exception("Erro ao obter token")
+
+            SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+            LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+
+            url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+
+            payload = {
+                "fields": {
+                    "Despesa": f"Despesa Germano {nome_arquivo}",
+                    "Valor": float(total_geral),
+                    "Vencimento": vencimento.strftime("%m/%d/%Y"),
+                    "QuemPagou": "Germano",
+                    "pago": "sim"
+                }
+            }
+
+            response = requests.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                json=payload
+            )
+
+            if response.status_code == 201:
+                st.success("✅ Enviado para SharePoint com sucesso")
+            else:
+                st.error(f"❌ Erro SharePoint: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            st.error(f"Erro na integração SharePoint: {e}")
