@@ -17,7 +17,6 @@ from datetime import datetime
 st.set_page_config(page_title="Extrair Fatura para Excel e SharePoint", layout="wide")
 st.title("Extrair Débitos da Fatura (com Totais, Excel e SharePoint)")
 
-# ================== Upload do PDF ==================
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 # ================== Funções utilitárias ==================
@@ -60,14 +59,9 @@ def extract_tabela_transacoes(text):
 
 def extract_tabela_favorecidos(text):
     pattern = (
-        r"(\d{2}/\d{2})\s+"           
-        r"(\S+)\s+"                    
-        r"([A-Z0-9\s]+?)\s+"           
-        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+" 
-        r"(\d{8})\s+"                  
-        r"(\d{3,5})\s+"                
-        r"([\d\-]+)\s+"                
-        r"([\d.,]+)"                    
+        r"(\d{2}/\d{2})\s+(\S+)\s+([A-Z0-9\s]+?)\s+"
+        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+(\d{8})\s+"
+        r"(\d{3,5})\s+([\d\-]+)\s+([\d.,]+)"
     )
     matches = re.findall(pattern, text, re.MULTILINE)
     if not matches:
@@ -82,169 +76,76 @@ def extract_tabela_favorecidos(text):
     return df
 
 def extrair_mes_ano(nome_arquivo):
-    # Espera formato como "JAN 2025" no nome do arquivo
     mes_ano = re.search(r"([A-Z]{3})\s*(\d{4})", nome_arquivo.upper())
     if mes_ano:
         mes_abrev, ano = mes_ano.groups()
         try:
             mes = datetime.strptime(mes_abrev, "%b").month
         except:
-            # fallback se não reconhecer a abreviação
             meses = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
             mes = meses.index(mes_abrev)+1
         return datetime(int(ano), mes, 1)
-    else:
-        return datetime.now()
+    return datetime.now()
 
-# ================== Processamento principal ==================
+# ================== Processamento ==================
 if uploaded_file:
-    try:
-        uploaded_file.seek(0)
-        texts = extract_text_from_pdf(uploaded_file)
+    uploaded_file.seek(0)
+    texts = extract_text_from_pdf(uploaded_file)
 
-        listas_transacoes = []
-        listas_favorecidos = []
+    if "df_transacoes" not in st.session_state:
+        listas_transacoes, listas_favorecidos = [], []
 
         for t in texts:
-            df_t = extract_tabela_transacoes(t)
-            if not df_t.empty:
-                listas_transacoes.append(df_t)
-            df_f = extract_tabela_favorecidos(t)
-            if not df_f.empty:
-                listas_favorecidos.append(df_f)
+            dt = extract_tabela_transacoes(t)
+            if not dt.empty:
+                listas_transacoes.append(dt)
 
-        if not listas_transacoes and not listas_favorecidos:
-            st.warning("Nenhuma tabela reconhecida no PDF.")
-        else:
-            st.subheader("Pré-visualização das tabelas")
+            df = extract_tabela_favorecidos(t)
+            if not df.empty:
+                listas_favorecidos.append(df)
 
-            if listas_transacoes:
-                df_transacoes = pd.concat(listas_transacoes, ignore_index=True)
-                st.write("Débitos:")
-                st.dataframe(df_transacoes)
-                total_transacoes = df_transacoes["Valor (R$)"].sum()
-                st.info(f"💰 Total de Débitos: R$ {total_transacoes:,.2f}")
+        st.session_state.df_transacoes = (
+            pd.concat(listas_transacoes, ignore_index=True)
+            if listas_transacoes else pd.DataFrame()
+        )
 
-            if listas_favorecidos:
-                df_favorecidos = pd.concat(listas_favorecidos, ignore_index=True)
-                st.write("Envios de PIX:")
-                st.dataframe(df_favorecidos)
-                total_favorecidos = df_favorecidos["Valor (R$)"].sum()
-                st.info(f"💰 Total de Envios de PIX: R$ {total_favorecidos:,.2f}")
+        st.session_state.df_favorecidos = (
+            pd.concat(listas_favorecidos, ignore_index=True)
+            if listas_favorecidos else pd.DataFrame()
+        )
 
-            # Nome do arquivo
-            default_name = uploaded_file.name.rsplit(".",1)[0]
-            nome_arquivo = st.text_input("Nome do arquivo Excel (sem .xlsx)", value=default_name)
+    st.subheader("Pré-visualização (exclusão manual)")
 
-            vencimento = extrair_mes_ano(nome_arquivo)
+    # ================== Débitos ==================
+    if not st.session_state.df_transacoes.empty:
+        st.write("Débitos:")
 
-            # ================== Preparar Excel ==================
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                style = TableStyleInfo(
-                    name="TableStyleMedium9",
-                    showFirstColumn=False,
-                    showLastColumn=False,
-                    showRowStripes=True,
-                    showColumnStripes=False
-                )
+        for i, row in st.session_state.df_transacoes.iterrows():
+            c1, c2, c3, c4 = st.columns([1,4,2,0.5])
+            c1.write(row["Data"])
+            c2.write(row["Estabelecimento"])
+            c3.write(f"R$ {row['Valor (R$)']:,.2f}")
+            if c4.button("🗑️", key=f"del_t_{i}"):
+                st.session_state.df_transacoes.drop(i, inplace=True)
+                st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
+                st.rerun()
 
-                df_excel_list = []
+        total = st.session_state.df_transacoes["Valor (R$)"].sum()
+        st.info(f"💰 Total de Débitos: R$ {total:,.2f}")
 
-                if listas_transacoes:
-                    df_trans_excel = df_transacoes.rename(columns={"Estabelecimento":"Descrição","Valor (R$)":"Valor"})[["Data","Descrição","Valor"]]
-                    df_excel_list.append(df_trans_excel)
-                if listas_favorecidos:
-                    df_fav_excel = df_favorecidos.rename(columns={"Favorecido":"Descrição","Valor (R$)":"Valor"})[["Data","Descrição","Valor"]]
-                    df_excel_list.append(df_fav_excel)
+    # ================== PIX ==================
+    if not st.session_state.df_favorecidos.empty:
+        st.write("Envios de PIX:")
 
-                if df_excel_list:
-                    df_excel = pd.concat(df_excel_list, ignore_index=True)
-                else:
-                    df_excel = pd.DataFrame(columns=["Data","Descrição","Valor"])
+        for i, row in st.session_state.df_favorecidos.iterrows():
+            c1, c2, c3, c4 = st.columns([1,4,2,0.5])
+            c1.write(row["Data"])
+            c2.write(row["Favorecido"])
+            c3.write(f"R$ {row['Valor (R$)']:,.2f}")
+            if c4.button("🗑️", key=f"del_f_{i}"):
+                st.session_state.df_favorecidos.drop(i, inplace=True)
+                st.session_state.df_favorecidos.reset_index(drop=True, inplace=True)
+                st.rerun()
 
-                # Linha TOTAL
-                total_geral = df_excel["Valor"].sum()
-                df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
-
-                # Salvar
-                sheet_name = "Fatura"
-                df_excel.to_excel(writer, sheet_name=sheet_name, index=False)
-                ws = writer.book[sheet_name]
-                max_row = ws.max_row
-                max_col = ws.max_column
-                ref = f"A1:{get_column_letter(max_col)}{max_row}"
-                tabela = Table(displayName="TabelaFatura", ref=ref)
-                tabela.tableStyleInfo = style
-                ws.add_table(tabela)
-                for row in ws.iter_rows(min_row=2, min_col=max_col, max_col=max_col, max_row=max_row):
-                    for cell in row:
-                        cell.number_format = '#,##0.00'
-
-            output.seek(0)
-            st.success("✅ Excel gerado com sucesso — pronto para download.")
-            st.download_button(
-                label="📥 Baixar Excel",
-                data=output,
-                file_name=sanitize_filename(nome_arquivo)+".xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-            # ================== Enviar para SharePoint ==================
-            if st.button("Enviar total para SharePoint"):
-                try:
-                    # Variáveis de ambiente
-                    CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
-                    TENANT_ID = os.getenv("AZURE_TENANT_ID")
-                    CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
-
-                    if not CLIENT_SECRET:
-                        raise Exception("CLIENT_SECRET não encontrado como variável de ambiente")
-
-                    app = msal.ConfidentialClientApplication(
-                        client_id=CLIENT_ID,
-                        client_credential=CLIENT_SECRET,
-                        authority=f"https://login.microsoftonline.com/{TENANT_ID}"
-                    )
-
-                    token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-                    access_token = token.get("access_token")
-                    if not access_token:
-                        raise Exception("Erro ao obter token do MS Graph")
-
-                    # SharePoint
-                    SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-                    LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-                    url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-
-                    payload = {
-                        "fields": {
-                            "Despesa": f"Despesa Germano {nome_arquivo}",
-                            "Valor": float(total_geral),
-                            "Vencimento": vencimento.strftime("%m/%d/%Y"),
-                            "QuemPagou": "Germano",
-                            "pago": "sim"
-                        }
-                    }
-
-                    headers = {
-                        "Authorization": f"Bearer {access_token}",
-                        "Content-Type": "application/json"
-                    }
-
-                    response = requests.post(url, headers=headers, json=payload)
-
-                    if response.status_code == 201:
-                        st.success("✅ Total enviado com sucesso para SharePoint")
-                    else:
-                        st.error(f"❌ Erro ao enviar para SharePoint: {response.status_code} {response.text}")
-
-                except Exception as e:
-                    st.error(f"Erro na integração SharePoint: {e}")
-
-    except Exception as e:
-        st.error(f"Erro ao processar PDF: {e}")
-
-
-
+        total_pix = st.session_state.df_favorecidos["Valor (R$)"].sum()
+        st.info(f"💰 Total PIX: R$ {total_pix:,.2f}")
