@@ -47,14 +47,24 @@ arquivo = st.file_uploader("Envie seu CSV", type=["csv"])
 
 if arquivo:
     df = pd.read_csv(arquivo)
+
+    # ----------------------------------------------
+    # 🔥 FILTRAR APENAS OS VALORES NEGATIVOS
+    # ----------------------------------------------
+    if "valor" in df.columns:
+        df = df[df["valor"] < 0].reset_index(drop=True)
+    else:
+        st.error("A coluna 'valor' não existe no CSV! Verifique o arquivo.")
+        st.stop()
+
     st.session_state.df = df.copy()
-    st.success("CSV carregado com sucesso!")
+    st.success("CSV carregado com sucesso! (somente valores negativos incluídos)")
 
 # ---------------------------------------------------------
 # Exibir tabela com opção de exclusão
 # ---------------------------------------------------------
 if st.session_state.df is not None:
-    st.header("📌 Dados carregados")
+    st.header("📌 Dados carregados (apenas valores negativos)")
 
     df = st.session_state.df
 
