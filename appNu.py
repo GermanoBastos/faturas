@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import requests
+import numpy as np
 
 st.set_page_config(page_title="Processar CSV", page_icon="📄", layout="wide")
 
@@ -40,6 +41,53 @@ def add_item_to_sharepoint(token, site_id, list_id, fields):
     r.raise_for_status()
 
 # ---------------------------------------------------------
+# Função para normalizar string de valor para float
+# Lida com formatos comuns: "R$ 1.234,56", "-1.234,56", "(1.234,56)", "1234.56"
+# ---------------------------------------------------------
+def parse_val_to_float(x):
+    if pd.isna(x):
+        return np.nan
+    s = str(x).strip()
+
+    # remove símbolo de moeda e espaços não imprimíveis
+    s = s.replace("R$", "").replace("r$", "").replace("\xa0", "").strip()
+
+    # trata valor entre parênteses como negativo: (1.234,56) -> -1.234,56
+    if s.startswith("(") and s.endswith(")"):
+        s = "-" + s[1:-1]
+
+    # remover sinais extras
+    s = s.replace("+", "")
+
+    # se houver tanto '.' quanto ',' assumimos que '.' é milhares e ',' decimal (formato BR)
+    if "." in s and "," in s:
+        s = s.replace(".", "")      # remove milhares
+        s = s.replace(",", ".")     # transforma decimal para ponto
+    else:
+        # se só tiver vírgula, é decimal no formato BR -> trocar por ponto
+        if "," in s and "." not in s:
+            s = s.replace(",", ".")
+        # se só tiver ponto, pode já estar no formato EN (1234.56) -> manter
+
+    # remover espaços remanescentes
+    s = s.replace(" ", "")
+
+    # tratar casos onde resta caracteres não-numéricos (ex: texto). tenta extrair número via filtro
+    # se falhar, retorna NaN
+    try:
+        return float(s)
+    except Exception:
+        # remover tudo que não seja dígito, ponto ou sinal de menos e tentar de novo
+        import re
+        cleaned = re.sub(r"[^0-9\.\-]", "", s)
+        try:
+            if cleaned == "" or cleaned == "-" or cleaned == ".":
+                return np.nan
+            return float(cleaned)
+        except Exception:
+            return np.nan
+
+# ---------------------------------------------------------
 # Upload do CSV
 # ---------------------------------------------------------
 st.header("📄 Upload do CSV")
@@ -48,17 +96,37 @@ arquivo = st.file_uploader("Envie seu CSV", type=["csv"])
 if arquivo:
     df = pd.read_csv(arquivo)
 
-    # ----------------------------------------------
-    # 🔥 FILTRAR APENAS OS VALORES NEGATIVOS
-    # ----------------------------------------------
-    if "valor" in df.columns:
-        df = df[df["valor"] < 0].reset_index(drop=True)
+    # Verifica se existe a coluna 'valor' (case-insensitive tentativa)
+    col_candidates = [c for c in df.columns if c.lower() == "valor"]
+    if not col_candidates:
+        st.error("A coluna 'valor' não existe no CSV! Verifique o nome exato da coluna.")
     else:
-        st.error("A coluna 'valor' não existe no CSV! Verifique o arquivo.")
-        st.stop()
+        valor_col = col_candidates[0]  # pega a coluna com nome 'valor' (mesmo se tiver VARIAÇÃO de case)
+        
+        # Cria uma coluna numérica com o valor convertido
+        df["_valor_num"] = df[valor_col].apply(parse_val_to_float)
 
-    st.session_state.df = df.copy()
-    st.success("CSV carregado com sucesso! (somente valores negativos incluídos)")
+        # Relatório de conversão
+        total_linhas = len(df)
+        num_nan = df["_valor_num"].isna().sum()
+        num_neg = (df["_valor_num"] < 0).sum()
+        num_pos = (df["_valor_num"] > 0).sum()
+        num_zero = (df["_valor_num"] == 0).sum()
+
+        st.info(f"Linhas: {total_linhas} • Negativos: {num_neg} • Positivos: {num_pos} • Zeros: {num_zero} • Não convertidos (NaN): {num_nan}")
+
+        # Mostrar amostra das linhas onde conversão falhou, se houver
+        if num_nan > 0:
+            st.warning("Algumas linhas não foram convertidas para número (NaN). Exemplo:")
+            st.dataframe(df[df["_valor_num"].isna()].head(10))
+
+        # FILTRO: manter somente negativos (onde valor numérico < 0)
+        df_filtrado = df[df["_valor_num"] < 0].copy().reset_index(drop=True)
+
+        # Se quiser manter a coluna original sem o sufixo, deixar como estava; 
+        # aqui mantemos todas as colunas e a coluna auxiliar _valor_num
+        st.session_state.df = df_filtrado.copy()
+        st.success("CSV carregado com sucesso! (filtrado: apenas valores negativos)")
 
 # ---------------------------------------------------------
 # Exibir tabela com opção de exclusão
@@ -68,14 +136,13 @@ if st.session_state.df is not None:
 
     df = st.session_state.df
 
-    # Criar uma coluna para excluir
+    # Criar botões individualmente para exclusão
     st.write("Clique para excluir uma linha:")
 
-    # Criar botões individualmente
     for idx in df.index:
         cols = st.columns([10, 1])
+        # exibimos a linha sem a coluna auxiliar _valor_num ou exibimos tudo? aqui exibimos todas colunas
         cols[0].write(df.loc[idx])
-
         if cols[1].button("❌", key=f"del_{idx}"):
             st.session_state.df = df.drop(idx).reset_index(drop=True)
             st.rerun()
@@ -86,9 +153,10 @@ if st.session_state.df is not None:
     # Download do Excel atualizado
     # ---------------------------------------------------------
     st.subheader("⬇ Baixar Excel")
-
     output = io.BytesIO()
-    st.session_state.df.to_excel(output, index=False)
+    # remover a coluna auxiliar antes de exportar (se preferir manter, comente a linha abaixo)
+    export_df = st.session_state.df.drop(columns=[c for c in st.session_state.df.columns if c == "_valor_num"], errors='ignore')
+    export_df.to_excel(output, index=False)
     excel_bytes = output.getvalue()
 
     st.download_button(
@@ -115,9 +183,10 @@ if st.session_state.df is not None:
         try:
             token = get_token(client_id, client_secret, tenant_id)
 
+            # ao enviar, removemos a coluna auxiliar _valor_num do payload (caso não exista na lista)
             for _, row in st.session_state.df.iterrows():
-                fields = row.to_dict()
-                add_item_to_sharepoint(token, site_id, list_id, fields)
+                payload_row = row.drop(labels=[c for c in row.index if c == "_valor_num"], errors='ignore').to_dict()
+                add_item_to_sharepoint(token, site_id, list_id, payload_row)
 
             st.success("Todos os dados foram enviados ao SharePoint!")
 
