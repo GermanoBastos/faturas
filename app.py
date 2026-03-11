@@ -404,109 +404,12 @@ if uploaded_file:
         except Exception as e:
             st.error(e)
 
-        import streamlit as st
-import pandas as pd
-import os
-import requests
-import msal
-
-# ================= CONFIG =================
-
-SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-# ================= AUTENTICAÇÃO =================
-
-def get_token():
-
-    app = msal.ConfidentialClientApplication(
-        client_id=os.getenv("AZURE_CLIENT_ID"),
-        client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-        authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-    )
-
-    token = app.acquire_token_for_client(
-        scopes=["https://graph.microsoft.com/.default"]
-    )
-
-    return token.get("access_token")
-
-
-# ================= LER ITENS =================
-
-def buscar_itens_sharepoint():
-
-    access_token = get_token()
-
-    url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items?expand=fields"
-
-    response = requests.get(
-        url,
-        headers={"Authorization":f"Bearer {access_token}"}
-    )
-
-    data=response.json()
-
-    lista=[]
-
-    for item in data["value"]:
-
-        campos=item["fields"]
-        campos["ID"]=item["id"]
-
-        lista.append(campos)
-
-    df=pd.DataFrame(lista)
-
-    return df
-
-
-# ================= EDITAR ITEM =================
-
-def atualizar_item_sharepoint(item_id,despesa,quem_pagou):
-
-    access_token = get_token()
-
-    url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/fields"
-
-    payload={
-        "Despesa":despesa,
-        "QuemPagou":quem_pagou
-    }
-
-    response=requests.patch(
-        url,
-        headers={
-            "Authorization":f"Bearer {access_token}",
-            "Content-Type":"application/json"
-        },
-        json=payload
-    )
-
-    return response.status_code
-
-
-# ================= EXCLUIR ITEM =================
-
-def deletar_item_sharepoint(item_id):
-
-    access_token = get_token()
-
-    url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}"
-
-    response=requests.delete(
-        url,
-        headers={"Authorization":f"Bearer {access_token}"}
-    )
-
-    return response.status_code
-
-
-# ================= INTERFACE =================
+        # ================= SHAREPOINT =================
 
 st.subheader("Despesas no SharePoint")
 
-if st.button("Carregar despesas do SharePoint"):
+# carregar dados
+if st.button("Carregar despesas"):
 
     st.session_state.df_sharepoint = buscar_itens_sharepoint()
 
@@ -517,37 +420,48 @@ if "df_sharepoint" in st.session_state:
 
     if not df.empty:
 
-        for i,row in df.iterrows():
+        # mostrar apenas colunas desejadas
+        df_view = df[["ID","MesAno","Despesa","QuemPagou"]]
 
-            c1,c2,c3,c4,c5 = st.columns([2,4,2,1,1])
+        edited_df = st.data_editor(
+            df_view,
+            hide_index=True,
+            num_rows="fixed"
+        )
 
-            c1.write(row.get("MesAno",""))
-            despesa = c2.text_input("Despesa",value=row.get("Despesa",""),key=f"d{i}")
-            quem = c3.text_input("Quem Pagou",value=row.get("QuemPagou",""),key=f"q{i}")
+        col1,col2 = st.columns(2)
 
-            # botão editar
-            if c4.button("💾",key=f"edit{i}"):
+        # salvar alterações
+        if col1.button("Salvar alterações"):
 
-                status = atualizar_item_sharepoint(row["ID"],despesa,quem)
+            for i,row in edited_df.iterrows():
 
-                if status==200:
-                    st.success("Atualizado")
-                    st.rerun()
-                else:
-                    st.error("Erro ao atualizar")
+                original = df.loc[i]
 
-            # botão deletar
-            if c5.button("🗑️",key=f"del{i}"):
+                if (
+                    row["Despesa"] != original["Despesa"]
+                    or row["QuemPagou"] != original["QuemPagou"]
+                ):
 
-                status = deletar_item_sharepoint(row["ID"])
+                    atualizar_item_sharepoint(
+                        row["ID"],
+                        row["Despesa"],
+                        row["QuemPagou"]
+                    )
 
-                if status==204:
-                    st.success("Item deletado")
-                    st.rerun()
-                else:
-                    st.error("Erro ao deletar")
+            st.success("Alterações salvas")
+            st.rerun()
 
-    
+
+        # deletar selecionado
+        id_delete = col2.number_input("ID para deletar",step=1)
+
+        if col2.button("Excluir"):
+
+            deletar_item_sharepoint(int(id_delete))
+
+            st.success("Item excluído")
+            st.rerun()
 
 
 
