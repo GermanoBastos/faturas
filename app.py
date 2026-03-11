@@ -201,30 +201,6 @@ with st.form("form_debito", clear_on_submit=True):
 
             st.rerun()
 
-# ================= LISTA DÉBITOS =================
-
-if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.empty:
-
-    st.subheader("Débitos")
-
-    for i,row in st.session_state.df_transacoes.iterrows():
-
-        a,b,c,d,e=st.columns([1,4,2,0.5,0.5])
-
-        a.write(row["Data"])
-        b.write(row["Estabelecimento"])
-        c.write(f"R$ {row['Valor (R$)']:,.2f}")
-
-        if d.button("✏️",key=f"edit_t_{i}"):
-            st.session_state.edit_debito=i
-
-        if e.button("🗑️",key=f"del_t_{i}"):
-
-            st.session_state.df_transacoes.drop(i,inplace=True)
-            st.session_state.df_transacoes.reset_index(drop=True,inplace=True)
-
-            st.rerun()
-
     # ===== formulário edição
 
     if st.session_state.edit_debito is not None:
@@ -256,6 +232,32 @@ if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.em
 
                     st.session_state.edit_debito=None
                     st.rerun()
+
+# ================= LISTA DÉBITOS =================
+
+if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.empty:
+
+    st.subheader("Débitos")
+
+    for i,row in st.session_state.df_transacoes.iterrows():
+
+        a,b,c,d,e=st.columns([1,4,2,0.5,0.5])
+
+        a.write(row["Data"])
+        b.write(row["Estabelecimento"])
+        c.write(f"R$ {row['Valor (R$)']:,.2f}")
+
+        if d.button("✏️",key=f"edit_t_{i}"):
+            st.session_state.edit_debito=i
+
+        if e.button("🗑️",key=f"del_t_{i}"):
+
+            st.session_state.df_transacoes.drop(i,inplace=True)
+            st.session_state.df_transacoes.reset_index(drop=True,inplace=True)
+
+            st.rerun()
+
+
 
     total_debito=st.session_state.df_transacoes["Valor (R$)"].sum()
 
@@ -439,4 +441,5 @@ if st.button("Enviar total para SharePoint"):
 
     except Exception as e:
         st.error(e)
+
 
