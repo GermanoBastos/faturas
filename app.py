@@ -221,62 +221,19 @@ if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.em
     st.info(f"Total Débitos: R$ {total_debito:,.2f}")
 
 # ================= LISTA PIX =================
+# ================= LISTA PIX =================
 
 if "df_pix" in st.session_state and not st.session_state.df_pix.empty:
 
     st.subheader("PIX")
 
-    for i,row in st.session_state.df_pix.iterrows():
+    st.session_state.df_pix = st.data_editor(
+        st.session_state.df_pix,
+        num_rows="dynamic",
+        use_container_width=True
+    )
 
-        a,b,c,d,e=st.columns([1,4,2,0.5,0.5])
-
-        a.write(row["Data"])
-        b.write(row["Favorecido"])
-        c.write(f"R$ {row['Valor (R$)']:,.2f}")
-
-        if d.button("✏️",key=f"edit_p_{i}"):
-            st.session_state.edit_pix=i
-
-        if e.button("🗑️",key=f"del_p_{i}"):
-
-            st.session_state.df_pix.drop(i,inplace=True)
-            st.session_state.df_pix.reset_index(drop=True,inplace=True)
-
-            st.rerun()
-
-    # ===== edição pix
-
-    if st.session_state.edit_pix is not None:
-
-        idx=st.session_state.edit_pix
-        row=st.session_state.df_pix.loc[idx]
-
-        st.markdown("### Editar PIX")
-
-        with st.form("editar_pix"):
-
-            c1,c2,c3=st.columns(3)
-
-            data=c1.text_input("Data",row["Data"])
-            fav=c2.text_input("Favorecido",row["Favorecido"])
-            valor=c3.text_input("Valor",str(row["Valor (R$)"]))
-
-            if st.form_submit_button("Salvar"):
-
-                v=parse_valor_input(valor)
-
-                if v is not None:
-
-                    st.session_state.df_pix.loc[idx]=[
-                        data,
-                        fav.upper(),
-                        v
-                    ]
-
-                    st.session_state.edit_pix=None
-                    st.rerun()
-
-    total_pix=st.session_state.df_pix["Valor (R$)"].sum()
+    total_pix = st.session_state.df_pix["Valor (R$)"].sum()
 
     st.info(f"Total PIX: R$ {total_pix:,.2f}")
     # ================= Excel =================
@@ -398,6 +355,7 @@ if st.button("Enviar total para SharePoint"):
 
     except Exception as e:
         st.error(e)
+
 
 
 
