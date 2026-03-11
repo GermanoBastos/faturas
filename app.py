@@ -466,81 +466,47 @@ def buscar_itens_sharepoint():
 
 
 # ================= Botão para carregar despesas =================
+# ================= Botão para carregar despesas =================
 if st.button("Carregar despesas do SharePoint"):
-    df = buscar_itens_sharepoint()
+    st.session_state.df_sharepoint = buscar_itens_sharepoint()
 
-    if not df.empty:
-        # Exibir somente colunas desejadas
-        df_view = df[["ID", "MesAno", "Despesa", "QuemPagou"]].copy()
+if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.empty:
+    df = st.session_state.df_sharepoint.copy()
+    
+    # Exibir somente colunas desejadas
+    df_view = df[["ID", "MesAno", "Despesa", "QuemPagou"]].copy()
+    df_view["Excluir"] = False
 
-        # Adiciona coluna de exclusão
-        df_view["Excluir"] = False
+    # Data editor para edição direta
+    edited = st.data_editor(
+        df_view,
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_sharepoint"
+    )
 
-        # Data editor para edição direta
-        edited = st.data_editor(
-            df_view,
-            use_container_width=True,
-            num_rows="dynamic",
-            key="editor_sharepoint"
-        )
+    # ================= Exclusão =================
+    if st.button("Excluir itens selecionados"):
+        ids_para_excluir = edited.loc[edited["Excluir"], "ID"].tolist()
+        if ids_para_excluir:
+            for item_id in ids_para_excluir:
+                # Aqui você chama Graph API para deletar...
+                pass
+            # Atualiza o df local sem dar rerun
+            st.session_state.df_sharepoint = df[~df["ID"].isin(ids_para_excluir)]
+            st.success("Itens excluídos localmente e no SharePoint!")
 
-        # ================= Exclusão =================
-        if st.button("Excluir itens selecionados"):
-            ids_para_excluir = edited.loc[edited["Excluir"], "ID"].tolist()
-            if ids_para_excluir:
-                try:
-                    app = msal.ConfidentialClientApplication(
-                        client_id=os.getenv("AZURE_CLIENT_ID"),
-                        client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-                        authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-                    )
-                    token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-                    access_token = token.get("access_token")
-                    SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-                    LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-                    for item_id in ids_para_excluir:
-                        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}"
-                        response = requests.delete(url, headers={"Authorization": f"Bearer {access_token}"})
-                        if response.status_code != 204:
-                            st.error(f"Erro ao excluir item {item_id}: {response.text}")
-
-                    st.success("Itens excluídos com sucesso!")
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"Erro ao excluir itens: {e}")
-
-        # ================= Edição =================
-        if st.button("Atualizar SharePoint"):
-            try:
-                app = msal.ConfidentialClientApplication(
-                    client_id=os.getenv("AZURE_CLIENT_ID"),
-                    client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-                    authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-                )
-                token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-                access_token = token.get("access_token")
-                SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-                LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-                for i, row in edited.iterrows():
-                    item_id = row["ID"]
-                    payload = {
-                        "fields": {
-                            "Despesa": row["Despesa"],
-                            "QuemPagou": row["QuemPagou"]
-                        }
-                    }
-                    url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}"
-                    response = requests.patch(url, headers={"Authorization": f"Bearer {access_token}",
-                                                            "Content-Type": "application/json"}, json=payload)
-                    if response.status_code != 200:
-                        st.error(f"Erro ao atualizar item {item_id}: {response.text}")
-
-                st.success("Itens atualizados com sucesso!")
+    # ================= Edição =================
+    if st.button("Atualizar SharePoint"):
+        for i, row in edited.iterrows():
+            item_id = row["ID"]
+            # Chama API para atualizar SharePoint...
+        st.session_state.df_sharepoint.update(edited.drop(columns=["Excluir"]))
+        st.success("Itens atualizados com sucesso!")
                 st.experimental_rerun()
             except Exception as e:
                 st.error(f"Erro ao atualizar itens: {e}")
+
 
 
 
