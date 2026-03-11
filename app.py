@@ -156,7 +156,26 @@ if uploaded_file:
 
     uploaded_file.seek(0)
 
-    if "df_transacoes" not in st.session_state:
+    texts = extract_text_from_pdf(uploaded_file)
+
+    lista_t = []
+    lista_p = []
+
+    for t in texts:
+
+        d = extract_tabela_transacoes(t)
+        if not d.empty:
+            lista_t.append(d)
+
+        p = extract_tabela_favorecidos(t)
+        if not p.empty:
+            lista_p.append(p)
+
+    if lista_t:
+        st.session_state.df_transacoes = pd.concat(lista_t, ignore_index=True)
+
+    if lista_p:
+        st.session_state.df_pix = pd.concat(lista_p, ignore_index=True)
 
         texts = extract_text_from_pdf(uploaded_file)
 
