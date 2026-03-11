@@ -381,7 +381,7 @@ if uploaded_file:
                 "fields":{
                     "Despesa":f"Despesa Germano {nome_arquivo}",
                     "Valor":float(total_geral),
-                    "Vencimento":"Vencimento":data_vencimento.strftime("%Y-%m-%d"),
+                    "Vencimento":data_vencimento.strftime("%Y-%m-%d"),
                     "QuemPagou":"Germano",
                     "pago":"sim"
                 }
@@ -403,6 +403,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
