@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import pandas as pd
 import pdfplumber
@@ -363,4 +363,4 @@ if st.button("Enviar total para SharePoint"):
 
     except Exception as e:
         st.error(e)
-```
+
