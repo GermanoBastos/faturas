@@ -536,15 +536,20 @@ def buscar_itens_sharepoint():
 if st.button("Carregar despesas do SharePoint"):
     st.session_state.df_sharepoint = buscar_itens_sharepoint()
 
+# Verifica se existem itens carregados
 if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.empty:
     df = st.session_state.df_sharepoint.copy()
 
     # Seleciona colunas para exibição
-    df_view = df[["ID","Despesa", "Valor","QuemPagou","Mes", "Ano"]].copy()
+    df_view = df[["ID", "Despesa", "Valor", "QuemPagou", "Mes", "Ano"]].copy()
+
     # Renomeia os cabeçalhos para exibição
     df_view.rename(columns={
-        "Valor": "Valor (R$)","QuemPagou":"Pago Por:"
+        "Valor": "Valor (R$)",
+        "QuemPagou": "Pago Por:"
     }, inplace=True)
+
+    # Coluna para marcar exclusão
     df_view["Excluir"] = False
 
     # Editor de dados interativo
@@ -559,42 +564,46 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
     # EXCLUSÃO DE ITENS
     # =========================================================================
     if st.button("Excluir itens selecionados"):
+        # Pega os IDs marcados para exclusão
         ids_para_excluir = edited.loc[edited["Excluir"], "ID"].tolist()
-    if ids_para_excluir:
-        try:
-            # Autenticação MSAL
-            app = msal.ConfidentialClientApplication(
-                client_id=os.getenv("AZURE_CLIENT_ID"),
-                client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-                authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-            )
 
-            token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-            access_token = token.get("access_token")
-
-            SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-            LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-            for item_id in ids_para_excluir:
-                url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}"
-                response = requests.delete(
-                    url,
-                    headers={"Authorization": f"Bearer {access_token}"}
+        if ids_para_excluir:
+            try:
+                # Autenticação MSAL
+                app = msal.ConfidentialClientApplication(
+                    client_id=os.getenv("AZURE_CLIENT_ID"),
+                    client_credential=os.getenv("AZURE_CLIENT_SECRET"),
+                    authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
                 )
-                if response.status_code == 204:
-                    st.info(f"Item {item_id} excluído do SharePoint")
-                else:
-                    st.error(f"Erro ao excluir {item_id}: {response.text}")
 
-            # Atualiza DataFrame local
-            st.session_state.df_sharepoint = st.session_state.df_sharepoint[
-                ~st.session_state.df_sharepoint["ID"].isin(ids_para_excluir)
-            ].reset_index(drop=True)
+                token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+                access_token = token.get("access_token")
 
-            st.success(f"{len(ids_para_excluir)} item(s) excluído(s) com sucesso!")
+                SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+                LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
 
-        except Exception as e:
-            st.error(f"Erro ao excluir itens: {e}")
+                for item_id in ids_para_excluir:
+                    url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}"
+                    response = requests.delete(
+                        url,
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if response.status_code == 204:
+                        st.info(f"Item {item_id} excluído do SharePoint")
+                    else:
+                        st.error(f"Erro ao excluir {item_id}: {response.text}")
+
+                # Atualiza DataFrame local
+                st.session_state.df_sharepoint = st.session_state.df_sharepoint[
+                    ~st.session_state.df_sharepoint["ID"].isin(ids_para_excluir)
+                ].reset_index(drop=True)
+
+                st.success(f"{len(ids_para_excluir)} item(s) excluído(s) com sucesso!")
+
+            except Exception as e:
+                st.error(f"Erro ao excluir itens: {e}")
+        else:
+            st.info("Nenhum item selecionado para exclusão.")
 
     # =========================================================================
     # ATUALIZAÇÃO DE ITENS
@@ -606,6 +615,7 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
             pass
         st.session_state.df_sharepoint.update(edited.drop(columns=["Excluir"]))
         st.success("Itens atualizados com sucesso!")
+
 
 
 
