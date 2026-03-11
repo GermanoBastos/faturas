@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import re
-from datetime import datetime
 from io import BytesIO
 
 st.set_page_config(page_title="Extrair Fatura para Excel e SharePoint", layout="wide")
@@ -12,12 +11,12 @@ st.title("Extrair Débitos da Fatura (com Totais, Excel e SharePoint)")
 
 if "df_transacoes" not in st.session_state:
     st.session_state.df_transacoes = pd.DataFrame(
-        columns=["Data","Estabelecimento","Valor (R$)"]
+        columns=["Data", "Estabelecimento", "Valor (R$)"]
     )
 
 if "df_pix" not in st.session_state:
     st.session_state.df_pix = pd.DataFrame(
-        columns=["Data","Favorecido","Valor (R$)"]
+        columns=["Data", "Favorecido", "Valor (R$)"]
     )
 
 # ================= FUNÇÕES =================
@@ -37,7 +36,7 @@ def ordenar_por_data(df):
 
 # ================= UPLOAD PDF =================
 
-uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
+uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf", key="upload_pdf")
 
 if uploaded_file:
 
@@ -45,7 +44,9 @@ if uploaded_file:
 
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
-            texto += page.extract_text() + "\n"
+            t = page.extract_text()
+            if t:
+                texto += t + "\n"
 
     linhas = texto.split("\n")
 
@@ -59,12 +60,12 @@ if uploaded_file:
 
             data = match.group(1)
             desc = match.group(2).strip().upper()
-            valor = float(match.group(3).replace(".","").replace(",","."))
+            valor = float(match.group(3).replace(".", "").replace(",", "."))
 
             dados.append({
-                "Data":data,
-                "Estabelecimento":desc,
-                "Valor (R$)":valor
+                "Data": data,
+                "Estabelecimento": desc,
+                "Valor (R$)": valor
             })
 
     if dados:
@@ -78,59 +79,55 @@ if uploaded_file:
 
         st.success("Itens do PDF adicionados!")
 
-# ================= INSERÇÃO MANUAL =================
+# ================= INSERÇÃO MANUAL DÉBITO =================
 
 st.subheader("Inserir Débito Manual")
 
-c1,c2,c3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-data_manual = c1.date_input("Data")
+data_manual = c1.date_input("Data", key="data_debito")
+desc_manual = c2.text_input("Descrição", key="desc_debito")
+valor_manual = c3.number_input("Valor", step=0.01, key="valor_debito")
 
-desc_manual = c2.text_input("Descrição")
-
-valor_manual = c3.number_input("Valor",step=0.01)
-
-if st.button("Adicionar Débito"):
+if st.button("Adicionar Débito", key="btn_add_debito"):
 
     if desc_manual and valor_manual:
 
         nova = pd.DataFrame([{
-            "Data":formatar_data(data_manual),
-            "Estabelecimento":desc_manual.strip().upper(),
-            "Valor (R$)":valor_manual
+            "Data": formatar_data(data_manual),
+            "Estabelecimento": desc_manual.strip().upper(),
+            "Valor (R$)": valor_manual
         }])
 
         st.session_state.df_transacoes = pd.concat(
-            [st.session_state.df_transacoes,nova],
+            [st.session_state.df_transacoes, nova],
             ignore_index=True
         )
 
         st.success("Item adicionado!")
 
-# ================= INSERÇÃO PIX =================
+# ================= INSERÇÃO MANUAL PIX =================
 
 st.subheader("Inserir PIX")
 
-c1,c2,c3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-data_pix = c1.date_input("Data PIX")
+data_pix = c1.date_input("Data PIX", key="data_pix")
+fav = c2.text_input("Favorecido", key="fav_pix")
+valor_pix = c3.number_input("Valor PIX", step=0.01, key="valor_pix")
 
-fav = c2.text_input("Favorecido")
-
-valor_pix = c3.number_input("Valor PIX",step=0.01)
-
-if st.button("Adicionar PIX"):
+if st.button("Adicionar PIX", key="btn_add_pix"):
 
     if fav and valor_pix:
 
         nova = pd.DataFrame([{
-            "Data":formatar_data(data_pix),
-            "Favorecido":fav.strip().upper(),
-            "Valor (R$)":valor_pix
+            "Data": formatar_data(data_pix),
+            "Favorecido": fav.strip().upper(),
+            "Valor (R$)": valor_pix
         }])
 
         st.session_state.df_pix = pd.concat(
-            [st.session_state.df_pix,nova],
+            [st.session_state.df_pix, nova],
             ignore_index=True
         )
 
@@ -152,7 +149,7 @@ if not st.session_state.df_transacoes.empty:
         key="editor_debitos"
     )
 
-    if st.button("Excluir Débitos Selecionados"):
+    if st.button("Excluir Débitos Selecionados", key="btn_del_deb"):
 
         st.session_state.df_transacoes = edited_deb[
             edited_deb["Excluir"] == False
@@ -162,8 +159,8 @@ if not st.session_state.df_transacoes.empty:
 
         st.rerun()
 
-    # Atualiza apenas as colunas editadas
     st.session_state.df_transacoes = edited_deb.drop(columns=["Excluir"])
+    st.session_state.df_transacoes = ordenar_por_data(st.session_state.df_transacoes)
 
     total = st.session_state.df_transacoes["Valor (R$)"].sum()
 
@@ -185,7 +182,7 @@ if not st.session_state.df_pix.empty:
         key="editor_pix"
     )
 
-    if st.button("Excluir PIX Selecionados"):
+    if st.button("Excluir PIX Selecionados", key="btn_del_pix"):
 
         st.session_state.df_pix = edited_pix[
             edited_pix["Excluir"] == False
@@ -196,6 +193,7 @@ if not st.session_state.df_pix.empty:
         st.rerun()
 
     st.session_state.df_pix = edited_pix.drop(columns=["Excluir"])
+    st.session_state.df_pix = ordenar_por_data(st.session_state.df_pix)
 
     total_pix = st.session_state.df_pix["Valor (R$)"].sum()
 
@@ -209,14 +207,19 @@ def gerar_excel():
 
     output = BytesIO()
 
-    with pd.ExcelWriter(output,engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 
-        st.session_state.df_transacoes.to_excel(writer,index=False,sheet_name="Debitos")
-        st.session_state.df_pix.to_excel(writer,index=False,sheet_name="PIX")
+        st.session_state.df_transacoes.to_excel(
+            writer, index=False, sheet_name="Debitos"
+        )
+
+        st.session_state.df_pix.to_excel(
+            writer, index=False, sheet_name="PIX"
+        )
 
     return output.getvalue()
 
-if st.button("Gerar Excel"):
+if st.button("Gerar Excel", key="btn_excel"):
 
     excel = gerar_excel()
 
@@ -224,7 +227,8 @@ if st.button("Gerar Excel"):
         label="Baixar Excel",
         data=excel,
         file_name="fatura.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="btn_download_excel"
     )
 
 # ================= SHAREPOINT =================
@@ -234,4 +238,5 @@ st.subheader("Enviar para SharePoint")
 if st.button("Enviar para SharePoint"):
 
     st.info("Aqui você conecta com Power Automate ou API do SharePoint.")
+
 
