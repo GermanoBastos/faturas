@@ -16,7 +16,17 @@ import requests
 
 st.set_page_config(page_title="Extrair Fatura", layout="wide")
 st.title("Extrair Débitos da Fatura")
+# ================= Inicializar Session State =================
 
+if "df_transacoes" not in st.session_state:
+    st.session_state.df_transacoes = pd.DataFrame(
+        columns=["Data","Estabelecimento","Valor (R$)"]
+    )
+
+if "df_pix" not in st.session_state:
+    st.session_state.df_pix = pd.DataFrame(
+        columns=["Data","Favorecido","Valor (R$)"]
+    )
 uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 # ================= Funções =================
@@ -363,4 +373,5 @@ if st.button("Enviar total para SharePoint"):
 
     except Exception as e:
         st.error(e)
+
 
