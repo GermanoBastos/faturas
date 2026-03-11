@@ -13,7 +13,7 @@ import pandas as pd
 import chardet
 import csv
 from pathlib import Path
-
+import chardet
 def diagnosticar_csv(caminho_arquivo):
     """
     Função completa para diagnosticar problemas em arquivos CSV
