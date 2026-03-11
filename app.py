@@ -404,63 +404,151 @@ if uploaded_file:
         except Exception as e:
             st.error(e)
 
-        # ================= Buscar itens no SharePoint =================
+        import streamlit as st
+import pandas as pd
+import os
+import requests
+import msal
+
+# ================= CONFIG =================
+
+SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+
+# ================= AUTENTICAÇÃO =================
+
+def get_token():
+
+    app = msal.ConfidentialClientApplication(
+        client_id=os.getenv("AZURE_CLIENT_ID"),
+        client_credential=os.getenv("AZURE_CLIENT_SECRET"),
+        authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
+    )
+
+    token = app.acquire_token_for_client(
+        scopes=["https://graph.microsoft.com/.default"]
+    )
+
+    return token.get("access_token")
+
+
+# ================= LER ITENS =================
 
 def buscar_itens_sharepoint():
 
-    try:
+    access_token = get_token()
 
-        app = msal.ConfidentialClientApplication(
-            client_id=os.getenv("AZURE_CLIENT_ID"),
-            client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-            authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-        )
+    url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items?expand=fields"
 
-        token = app.acquire_token_for_client(
-            scopes=["https://graph.microsoft.com/.default"]
-        )
+    response = requests.get(
+        url,
+        headers={"Authorization":f"Bearer {access_token}"}
+    )
 
-        access_token = token.get("access_token")
+    data=response.json()
 
-        SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-        LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+    lista=[]
 
-        url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items?expand=fields"
+    for item in data["value"]:
 
-        response = requests.get(
-            url,
-            headers={
-                "Authorization":f"Bearer {access_token}"
-            }
-        )
+        campos=item["fields"]
+        campos["ID"]=item["id"]
 
-        data = response.json()
+        lista.append(campos)
 
-        items = data["value"]
+    df=pd.DataFrame(lista)
 
-        lista = []
-
-        for item in items:
-            lista.append(item["fields"])
-
-        df = pd.DataFrame(lista)
-
-        return df
-
-    except Exception as e:
-
-        st.error(e)
-        return pd.DataFrame()
+    return df
 
 
-# ================= Botão para carregar =================
+# ================= EDITAR ITEM =================
+
+def atualizar_item_sharepoint(item_id,despesa,quem_pagou):
+
+    access_token = get_token()
+
+    url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/fields"
+
+    payload={
+        "Despesa":despesa,
+        "QuemPagou":quem_pagou
+    }
+
+    response=requests.patch(
+        url,
+        headers={
+            "Authorization":f"Bearer {access_token}",
+            "Content-Type":"application/json"
+        },
+        json=payload
+    )
+
+    return response.status_code
+
+
+# ================= EXCLUIR ITEM =================
+
+def deletar_item_sharepoint(item_id):
+
+    access_token = get_token()
+
+    url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}"
+
+    response=requests.delete(
+        url,
+        headers={"Authorization":f"Bearer {access_token}"}
+    )
+
+    return response.status_code
+
+
+# ================= INTERFACE =================
+
+st.subheader("Despesas no SharePoint")
 
 if st.button("Carregar despesas do SharePoint"):
 
-    df_sharepoint = buscar_itens_sharepoint()
-    st.dataframe(df_sharepoint[["Despesa","Valor","QuemPagou","Mes","Ano"]])
+    st.session_state.df_sharepoint = buscar_itens_sharepoint()
+
+
+if "df_sharepoint" in st.session_state:
+
+    df = st.session_state.df_sharepoint
+
+    if not df.empty:
+
+        for i,row in df.iterrows():
+
+            c1,c2,c3,c4,c5 = st.columns([2,4,2,1,1])
+
+            c1.write(row.get("MesAno",""))
+            despesa = c2.text_input("Despesa",value=row.get("Despesa",""),key=f"d{i}")
+            quem = c3.text_input("Quem Pagou",value=row.get("QuemPagou",""),key=f"q{i}")
+
+            # botão editar
+            if c4.button("💾",key=f"edit{i}"):
+
+                status = atualizar_item_sharepoint(row["ID"],despesa,quem)
+
+                if status==200:
+                    st.success("Atualizado")
+                    st.rerun()
+                else:
+                    st.error("Erro ao atualizar")
+
+            # botão deletar
+            if c5.button("🗑️",key=f"del{i}"):
+
+                status = deletar_item_sharepoint(row["ID"])
+
+                if status==204:
+                    st.success("Item deletado")
+                    st.rerun()
+                else:
+                    st.error("Erro ao deletar")
 
     
+
 
 
 
