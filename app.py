@@ -223,30 +223,6 @@ if uploaded_file:
         
         # ================= Inserção Manual PIX =================
         # ================= Lista PIX =================
-
-        if not st.session_state.df_pix.empty:
-        
-            st.markdown("### PIX")
-        
-            for i,row in st.session_state.df_pix.iterrows():
-        
-                a,b,c,d = st.columns([1,4,2,0.5])
-        
-                a.write(row["Data"])
-                b.write(row["Favorecido"])
-                c.write(f"R$ {row['Valor (R$)']:,.2f}")
-        
-                if d.button("🗑️", key=f"del_p_{i}"):
-        
-                    st.session_state.df_pix.drop(i, inplace=True)
-                    st.session_state.df_pix.reset_index(drop=True, inplace=True)
-        
-                    st.rerun()
-        
-            total_pix = st.session_state.df_pix["Valor (R$)"].sum()
-        
-            st.info(f"Total PIX: R$ {total_pix:,.2f}")
-        
         with st.form("form_pix", clear_on_submit=True):
         
             st.subheader("Inserir PIX Manual")
@@ -280,6 +256,31 @@ if uploaded_file:
                     st.session_state.df_pix.reset_index(drop=True, inplace=True)
         
                     st.rerun()
+
+        if not st.session_state.df_pix.empty:
+        
+            st.markdown("### PIX")
+        
+            for i,row in st.session_state.df_pix.iterrows():
+        
+                a,b,c,d = st.columns([1,4,2,0.5])
+        
+                a.write(row["Data"])
+                b.write(row["Favorecido"])
+                c.write(f"R$ {row['Valor (R$)']:,.2f}")
+        
+                if d.button("🗑️", key=f"del_p_{i}"):
+        
+                    st.session_state.df_pix.drop(i, inplace=True)
+                    st.session_state.df_pix.reset_index(drop=True, inplace=True)
+        
+                    st.rerun()
+        
+            total_pix = st.session_state.df_pix["Valor (R$)"].sum()
+        
+            st.info(f"Total PIX: R$ {total_pix:,.2f}")
+        
+        
     # ================= Excel =================
 
     nome_arquivo=st.text_input("Nome do arquivo Excel","fatura")
@@ -398,6 +399,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
