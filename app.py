@@ -458,9 +458,11 @@ def buscar_itens_sharepoint():
 if st.button("Carregar despesas do SharePoint"):
 
     df_sharepoint = buscar_itens_sharepoint()
+    st.dataframe(df_sharepoint[["Mes", "Ano","Despesa","QuemPagou"]])
 
     if not df_sharepoint.empty:
         st.dataframe(df_sharepoint)
+
 
 
 
