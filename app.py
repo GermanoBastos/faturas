@@ -383,7 +383,8 @@ if uploaded_file:
                     "Valor":float(total_geral),
                     "Vencimento":data_vencimento.strftime("%Y-%m-%d"),
                     "QuemPagou":"Germano",
-                    "pago":"sim"
+                    "pago":"sim",
+                    "Data": value=date.today()
                 }
             }
 
@@ -403,6 +404,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
