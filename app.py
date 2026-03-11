@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import pandas as pd
 import pdfplumber
@@ -390,3 +390,4 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
