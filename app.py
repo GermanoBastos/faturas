@@ -206,15 +206,30 @@ with st.form("form_debito", clear_on_submit=True):
 
 # ================= LISTA DÉBITOS =================
 
+# ================= LISTA DÉBITOS =================
+
 if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.empty:
 
     st.subheader("Débitos")
 
-    st.session_state.df_transacoes = st.data_editor(
-        st.session_state.df_transacoes,
-        num_rows="dynamic",
-        use_container_width=True
+    df_edit = st.session_state.df_transacoes.copy()
+
+    df_edit["Excluir"] = False
+
+    edited_df = st.data_editor(
+        df_edit,
+        use_container_width=True,
+        num_rows="dynamic"
     )
+
+    if st.button("Excluir selecionados"):
+
+        st.session_state.df_transacoes = edited_df[edited_df["Excluir"] == False].drop(columns=["Excluir"])
+        st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
+
+        st.rerun()
+
+    st.session_state.df_transacoes = edited_df.drop(columns=["Excluir"])
 
     total_debito = st.session_state.df_transacoes["Valor (R$)"].sum()
 
@@ -223,15 +238,30 @@ if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.em
 # ================= LISTA PIX =================
 # ================= LISTA PIX =================
 
+# ================= LISTA PIX =================
+
 if "df_pix" in st.session_state and not st.session_state.df_pix.empty:
 
     st.subheader("PIX")
 
-    st.session_state.df_pix = st.data_editor(
-        st.session_state.df_pix,
-        num_rows="dynamic",
-        use_container_width=True
+    df_edit = st.session_state.df_pix.copy()
+
+    df_edit["Excluir"] = False
+
+    edited_df = st.data_editor(
+        df_edit,
+        use_container_width=True,
+        num_rows="dynamic"
     )
+
+    if st.button("Excluir PIX selecionados"):
+
+        st.session_state.df_pix = edited_df[edited_df["Excluir"] == False].drop(columns=["Excluir"])
+        st.session_state.df_pix.reset_index(drop=True, inplace=True)
+
+        st.rerun()
+
+    st.session_state.df_pix = edited_df.drop(columns=["Excluir"])
 
     total_pix = st.session_state.df_pix["Valor (R$)"].sum()
 
@@ -355,6 +385,7 @@ if st.button("Enviar total para SharePoint"):
 
     except Exception as e:
         st.error(e)
+
 
 
 
