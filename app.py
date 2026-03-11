@@ -160,33 +160,34 @@ if uploaded_file:
 
     # ================= Inserção Manual Débito =================
 
+    with st.form("form_debito", clear_on_submit=True):
+
     st.subheader("Inserir Débito Manual")
 
-    c1,c2,c3,c4=st.columns([2,4,2,1])
+    c1,c2,c3,c4 = st.columns([2,4,2,1])
 
-    data_manual=c1.date_input("Data",key="deb_data")
-    desc_manual=c2.text_input("Descrição",key="deb_desc")
-    valor_manual=c3.text_input("Valor",key="deb_valor")
+    data_manual = c1.date_input("Data")
+    desc_manual = c2.text_input("Descrição")
+    valor_manual = c3.text_input("Valor")
 
-    if c4.button("Adicionar Débito"):
+    submitted = c4.form_submit_button("Adicionar Débito")
 
-        valor=parse_valor_input(valor_manual)
+    if submitted:
+
+        valor = parse_valor_input(valor_manual)
 
         if desc_manual and valor is not None:
 
-            nova=pd.DataFrame([{
-                "Data":formatar_data(data_manual),
-                "Estabelecimento":desc_manual,
-                "Valor (R$)":valor
+            nova = pd.DataFrame([{
+                "Data": formatar_data(data_manual),
+                "Estabelecimento": desc_manual,
+                "Valor (R$)": valor
             }])
 
-            st.session_state.df_transacoes=pd.concat(
-                [st.session_state.df_transacoes,nova],
+            st.session_state.df_transacoes = pd.concat(
+                [st.session_state.df_transacoes, nova],
                 ignore_index=True
             )
-
-            st.session_state.deb_desc=""
-            st.session_state.deb_valor=""
 
             st.rerun()
 
@@ -217,33 +218,34 @@ if uploaded_file:
 
     # ================= Inserção Manual PIX =================
 
+    with st.form("form_pix", clear_on_submit=True):
+
     st.subheader("Inserir PIX Manual")
 
-    c1,c2,c3,c4=st.columns([2,4,2,1])
+    c1,c2,c3,c4 = st.columns([2,4,2,1])
 
-    data_pix=c1.date_input("Data",key="pix_data")
-    fav=c2.text_input("Favorecido",key="pix_desc")
-    valor_pix=c3.text_input("Valor PIX",key="pix_valor")
+    data_pix = c1.date_input("Data")
+    fav = c2.text_input("Favorecido")
+    valor_pix = c3.text_input("Valor PIX")
 
-    if c4.button("Adicionar PIX"):
+    submitted = c4.form_submit_button("Adicionar PIX")
 
-        valor=parse_valor_input(valor_pix)
+    if submitted:
+
+        valor = parse_valor_input(valor_pix)
 
         if fav and valor is not None:
 
-            nova=pd.DataFrame([{
-                "Data":formatar_data(data_pix),
-                "Favorecido":fav,
-                "Valor (R$)":valor
+            nova = pd.DataFrame([{
+                "Data": formatar_data(data_pix),
+                "Favorecido": fav,
+                "Valor (R$)": valor
             }])
 
-            st.session_state.df_pix=pd.concat(
-                [st.session_state.df_pix,nova],
+            st.session_state.df_pix = pd.concat(
+                [st.session_state.df_pix, nova],
                 ignore_index=True
             )
-
-            st.session_state.pix_desc=""
-            st.session_state.pix_valor=""
 
             st.rerun()
 
@@ -365,4 +367,5 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
