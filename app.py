@@ -25,7 +25,17 @@ if "edit_debito" not in st.session_state:
 
 if "edit_pix" not in st.session_state:
     st.session_state.edit_pix=None
+# ================= SESSION DATAFRAMES =================
 
+if "df_transacoes" not in st.session_state:
+    st.session_state.df_transacoes = pd.DataFrame(
+        columns=["Data","Estabelecimento","Valor (R$)"]
+    )
+
+if "df_pix" not in st.session_state:
+    st.session_state.df_pix = pd.DataFrame(
+        columns=["Data","Favorecido","Valor (R$)"]
+    )
 # ================= Funções =================
 
 def sanitize_filename(name):
