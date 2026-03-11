@@ -182,7 +182,7 @@ if uploaded_file:
     
                 nova = pd.DataFrame([{
                     "Data": formatar_data(data_manual),
-                    "Estabelecimento": desc_manual,
+                    "Estabelecimento": desc_manual..upper(),
                     "Valor (R$)": valor
                 }])
     
@@ -243,7 +243,7 @@ if uploaded_file:
         
                     nova = pd.DataFrame([{
                         "Data": formatar_data(data_pix),
-                        "Favorecido": fav,
+                        "Favorecido": fav.upper(),
                         "Valor (R$)": valor
                     }])
         
@@ -399,6 +399,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
