@@ -541,6 +541,10 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
 
     # Seleciona colunas para exibição
     df_view = df[["Despesa", "Valor","QuemPagou","Mes", "Ano"]].copy()
+    # Renomeia os cabeçalhos para exibição
+    df_view.rename(columns={
+        "Valor": "Valor (R$)","QuemPagou":"Pago Por:"
+    }, inplace=True)
     df_view["Excluir"] = False
 
     # Editor de dados interativo
@@ -574,4 +578,5 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
             pass
         st.session_state.df_sharepoint.update(edited.drop(columns=["Excluir"]))
         st.success("Itens atualizados com sucesso!")
+
 
