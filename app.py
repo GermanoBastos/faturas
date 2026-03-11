@@ -346,6 +346,10 @@ if uploaded_file:
         )
 
     # ================= SharePoint =================
+    data_vencimento = st.date_input(
+    "Selecione o vencimento",
+    value=vencimento
+    )
 
     if st.button("Enviar total para SharePoint"):
 
@@ -377,7 +381,7 @@ if uploaded_file:
                 "fields":{
                     "Despesa":f"Despesa Germano {nome_arquivo}",
                     "Valor":float(total_geral),
-                    "Vencimento":vencimento.strftime("%m/%d/%Y"),
+                    "Vencimento":"Vencimento":data_vencimento.strftime("%Y-%m-%d"),
                     "QuemPagou":"Germano",
                     "pago":"sim"
                 }
@@ -399,6 +403,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
