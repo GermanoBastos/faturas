@@ -404,60 +404,64 @@ if uploaded_file:
         except Exception as e:
             st.error(e)
 
-        #Buscar itens no Sharepoint
-        def buscar_itens_sharepoint():
+        # ================= Buscar itens no SharePoint =================
 
-            try:
-        
-                app = msal.ConfidentialClientApplication(
-                    client_id=os.getenv("AZURE_CLIENT_ID"),
-                    client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-                    authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-                )
-        
-                token = app.acquire_token_for_client(
-                    scopes=["https://graph.microsoft.com/.default"]
-                )
-        
-                access_token = token.get("access_token")
-        
-                SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-                LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-        
-                url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items?expand=fields"
-        
-                response = requests.get(
-                    url,
-                    headers={
-                        "Authorization":f"Bearer {access_token}"
-                    }
-                )
-        
-                data=response.json()
-        
-                items=data["value"]
-        
-                lista=[]
-        
-                for item in items:
-                    lista.append(item["fields"])
-        
-                df=pd.DataFrame(lista)
-        
-                return df
-        
-            except Exception as e:
-        
-                st.error(e)
-                return pd.DataFrame()
-    
-            #Botão
-            if st.button("Carregar despesas do SharePoint"):
-    
-            df_sharepoint = buscar_itens_sharepoint()
-        
-            if not df_sharepoint.empty:
-            st.dataframe(df_sharepoint)
+def buscar_itens_sharepoint():
+
+    try:
+
+        app = msal.ConfidentialClientApplication(
+            client_id=os.getenv("AZURE_CLIENT_ID"),
+            client_credential=os.getenv("AZURE_CLIENT_SECRET"),
+            authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
+        )
+
+        token = app.acquire_token_for_client(
+            scopes=["https://graph.microsoft.com/.default"]
+        )
+
+        access_token = token.get("access_token")
+
+        SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+        LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+
+        url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items?expand=fields"
+
+        response = requests.get(
+            url,
+            headers={
+                "Authorization":f"Bearer {access_token}"
+            }
+        )
+
+        data = response.json()
+
+        items = data["value"]
+
+        lista = []
+
+        for item in items:
+            lista.append(item["fields"])
+
+        df = pd.DataFrame(lista)
+
+        return df
+
+    except Exception as e:
+
+        st.error(e)
+        return pd.DataFrame()
+
+
+# ================= Botão para carregar =================
+
+if st.button("Carregar despesas do SharePoint"):
+
+    df_sharepoint = buscar_itens_sharepoint()
+
+    if not df_sharepoint.empty:
+        st.dataframe(df_sharepoint)
+
 
 
 
