@@ -2,30 +2,13 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import re
-from io import BytesIO
-from pdf2image import convert_from_bytes
-import pytesseract
-import string
-from openpyxl.worksheet.table import Table, TableStyleInfo
-from openpyxl.utils import get_column_letter
-import os
-import msal
-import requests
 from datetime import datetime
+from io import BytesIO
 
 st.set_page_config(page_title="Extrair Fatura para Excel e SharePoint", layout="wide")
 st.title("Extrair Débitos da Fatura (com Totais, Excel e SharePoint)")
 
-uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
-
 # ================= SESSION =================
-
-if "edit_debito" not in st.session_state:
-    st.session_state.edit_debito=None
-
-if "edit_pix" not in st.session_state:
-    st.session_state.edit_pix=None
-# ================= SESSION DATAFRAMES =================
 
 if "df_transacoes" not in st.session_state:
     st.session_state.df_transacoes = pd.DataFrame(
@@ -36,369 +19,213 @@ if "df_pix" not in st.session_state:
     st.session_state.df_pix = pd.DataFrame(
         columns=["Data","Favorecido","Valor (R$)"]
     )
-# ================= Funções =================
 
-def sanitize_filename(name):
-    valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
-    return "".join(c for c in name if c in valid_chars).strip() or "fatura"
+# ================= FUNÇÕES =================
 
-def valor_br_para_float(valor_str):
-    if valor_str is None:
-        return 0.0
-    v = str(valor_str).strip()
-    v = v.replace("R$", "").replace(" ", "")
-    v = v.replace(".", "").replace(",", ".")
+def formatar_data(data):
+    return data.strftime("%d/%m")
+
+def ordenar_por_data(df):
     try:
-        return round(float(v), 2)
+        return df.sort_values(
+            by="Data",
+            key=lambda col: pd.to_datetime(col, format="%d/%m"),
+            ignore_index=True
+        )
     except:
-        return 0.0
+        return df
 
-def parse_valor_input(valor_str):
-    if not valor_str:
-        return None
-    v = valor_str.replace(" ", "")
-    v = v.replace(",", ".")
-    try:
-        return round(float(v), 2)
-    except:
-        return None
+# ================= UPLOAD PDF =================
 
-def formatar_data(d):
-    if d:
-        return d.strftime("%d/%m")
-    return ""
-
-def extract_text_from_pdf(file):
-
-    texts=[]
-
-    with pdfplumber.open(file) as pdf:
-        for page in pdf.pages:
-            txt=page.extract_text()
-            if txt:
-                texts.append(txt)
-
-    if not texts:
-        file.seek(0)
-        images=convert_from_bytes(file.read())
-        for img in images:
-            texts.append(pytesseract.image_to_string(img,lang="por"))
-
-    return texts
-
-def extract_tabela_transacoes(text):
-
-    pattern=r"(\d{2}/\d{2})\s+[\d.]+\s+(.+?)\s+([\d.,]+)$"
-
-    matches=re.findall(pattern,text,re.MULTILINE)
-
-    if not matches:
-        return pd.DataFrame()
-
-    df=pd.DataFrame(matches,columns=["Data","Estabelecimento","Valor (R$)"])
-    df["Valor (R$)"]=df["Valor (R$)"].apply(valor_br_para_float)
-
-    return df
-
-def extract_tabela_favorecidos(text):
-
-    pattern=(
-        r"(\d{2}/\d{2})\s+(\S+)\s+([A-Z0-9\s]+?)\s+"
-        r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+(\d{8})\s+"
-        r"(\d{3,5})\s+([\d\-]+)\s+([\d.,]+)"
-    )
-
-    matches=re.findall(pattern,text,re.MULTILINE)
-
-    if not matches:
-        return pd.DataFrame()
-
-    df_full=pd.DataFrame(matches)
-
-    df=pd.DataFrame()
-
-    df["Data"]=df_full[0]
-    df["Favorecido"]=df_full[3].str.strip()
-    df["Valor (R$)"]=df_full[7].apply(valor_br_para_float)
-
-    return df
-
-def extrair_mes_ano(nome):
-
-    mes_ano=re.search(r"([A-Z]{3})\s*(\d{4})",nome.upper())
-
-    if mes_ano:
-
-        mes_abrev,ano=mes_ano.groups()
-
-        meses=["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
-
-        try:
-            mes=meses.index(mes_abrev)+1
-        except:
-            mes=1
-
-        return datetime(int(ano),mes,1)
-
-    return datetime.now()
-
-# ================= Processamento =================
+uploaded_file = st.file_uploader("Escolha o PDF da fatura", type="pdf")
 
 if uploaded_file:
 
-    uploaded_file.seek(0)
+    texto = ""
 
-    if "df_transacoes" not in st.session_state:
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page in pdf.pages:
+            texto += page.extract_text() + "\n"
 
-        texts=extract_text_from_pdf(uploaded_file)
+    linhas = texto.split("\n")
 
-        lista_t=[]
-        lista_p=[]
+    dados = []
 
-        for t in texts:
+    for linha in linhas:
 
-            d=extract_tabela_transacoes(t)
-            if not d.empty:
-                lista_t.append(d)
+        match = re.search(r"(\d{2}/\d{2})\s+(.*?)\s+(-?\d+,\d{2})", linha)
 
-            p=extract_tabela_favorecidos(t)
-            if not p.empty:
-                lista_p.append(p)
+        if match:
 
-        st.session_state.df_transacoes=(
-            pd.concat(lista_t,ignore_index=True)
-            if lista_t else pd.DataFrame(columns=["Data","Estabelecimento","Valor (R$)"])
-        )
+            data = match.group(1)
+            desc = match.group(2).strip().upper()
+            valor = float(match.group(3).replace(".","").replace(",","."))
 
-        st.session_state.df_pix=(
-            pd.concat(lista_p,ignore_index=True)
-            if lista_p else pd.DataFrame(columns=["Data","Favorecido","Valor (R$)"])
-        )
-
-# ================= Inserção Manual Débito =================
-
-with st.form("form_debito", clear_on_submit=True):
-
-    st.subheader("Inserir Débito Manual")
-
-    c1,c2,c3,c4=st.columns([2,4,2,1])
-
-    data_manual=c1.date_input("Data")
-    desc_manual=c2.text_input("Descrição")
-    valor_manual=c3.text_input("Valor")
-
-    submitted=c4.form_submit_button("Adicionar")
-
-    if submitted:
-
-        valor=parse_valor_input(valor_manual)
-
-        if desc_manual and valor is not None:
-
-            nova=pd.DataFrame([{
-                "Data":formatar_data(data_manual),
-                "Estabelecimento":desc_manual.upper(),
+            dados.append({
+                "Data":data,
+                "Estabelecimento":desc,
                 "Valor (R$)":valor
-            }])
+            })
 
-            st.session_state.df_transacoes=pd.concat(
-                [st.session_state.df_transacoes,nova],
-                ignore_index=True
-            )
+    if dados:
 
-            st.session_state.df_transacoes.sort_values("Data",inplace=True)
-            st.session_state.df_transacoes.reset_index(drop=True,inplace=True)
+        df_pdf = pd.DataFrame(dados)
 
-            st.rerun()
+        st.session_state.df_transacoes = pd.concat(
+            [st.session_state.df_transacoes, df_pdf],
+            ignore_index=True
+        )
 
-    
+        st.success("Itens do PDF adicionados!")
 
+# ================= INSERÇÃO MANUAL =================
+
+st.subheader("Inserir Débito Manual")
+
+c1,c2,c3 = st.columns(3)
+
+data_manual = c1.date_input("Data")
+
+desc_manual = c2.text_input("Descrição")
+
+valor_manual = c3.number_input("Valor",step=0.01)
+
+if st.button("Adicionar Débito"):
+
+    if desc_manual and valor_manual:
+
+        nova = pd.DataFrame([{
+            "Data":formatar_data(data_manual),
+            "Estabelecimento":desc_manual.strip().upper(),
+            "Valor (R$)":valor_manual
+        }])
+
+        st.session_state.df_transacoes = pd.concat(
+            [st.session_state.df_transacoes,nova],
+            ignore_index=True
+        )
+
+        st.success("Item adicionado!")
+
+# ================= INSERÇÃO PIX =================
+
+st.subheader("Inserir PIX")
+
+c1,c2,c3 = st.columns(3)
+
+data_pix = c1.date_input("Data PIX")
+
+fav = c2.text_input("Favorecido")
+
+valor_pix = c3.number_input("Valor PIX",step=0.01)
+
+if st.button("Adicionar PIX"):
+
+    if fav and valor_pix:
+
+        nova = pd.DataFrame([{
+            "Data":formatar_data(data_pix),
+            "Favorecido":fav.strip().upper(),
+            "Valor (R$)":valor_pix
+        }])
+
+        st.session_state.df_pix = pd.concat(
+            [st.session_state.df_pix,nova],
+            ignore_index=True
+        )
+
+        st.success("PIX adicionado!")
 
 # ================= LISTA DÉBITOS =================
 
-# ================= LISTA DÉBITOS =================
+st.subheader("Débitos")
 
-if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.empty:
+if not st.session_state.df_transacoes.empty:
 
-    st.subheader("Débitos")
+    df = st.session_state.df_transacoes.copy()
 
-    df_edit = st.session_state.df_transacoes.copy()
+    df["Excluir"] = False
 
-    df_edit["Excluir"] = False
-
-    edited_df = st.data_editor(
-        df_edit,
+    edited = st.data_editor(
+        df,
         use_container_width=True,
         num_rows="dynamic"
     )
 
-    if st.button("Excluir selecionados"):
+    if st.button("Excluir Débitos Selecionados"):
 
-        st.session_state.df_transacoes = edited_df[edited_df["Excluir"] == False].drop(columns=["Excluir"])
-        st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
-
+        st.session_state.df_transacoes = edited[edited["Excluir"] == False].drop(columns=["Excluir"])
+        st.session_state.df_transacoes.reset_index(drop=True,inplace=True)
         st.rerun()
 
-    st.session_state.df_transacoes = edited_df.drop(columns=["Excluir"])
+    st.session_state.df_transacoes = edited.drop(columns=["Excluir"])
 
-    total_debito = st.session_state.df_transacoes["Valor (R$)"].sum()
+    st.session_state.df_transacoes = ordenar_por_data(st.session_state.df_transacoes)
 
-    st.info(f"Total Débitos: R$ {total_debito:,.2f}")
+    total = st.session_state.df_transacoes["Valor (R$)"].sum()
+
+    st.info(f"Total Débitos: R$ {total:,.2f}")
 
 # ================= LISTA PIX =================
-# ================= LISTA PIX =================
 
-# ================= LISTA PIX =================
+st.subheader("PIX")
 
-if "df_pix" in st.session_state and not st.session_state.df_pix.empty:
+if not st.session_state.df_pix.empty:
 
-    st.subheader("PIX")
+    df = st.session_state.df_pix.copy()
 
-    df_edit = st.session_state.df_pix.copy()
+    df["Excluir"] = False
 
-    df_edit["Excluir"] = False
-
-    edited_df = st.data_editor(
-        df_edit,
+    edited = st.data_editor(
+        df,
         use_container_width=True,
         num_rows="dynamic"
     )
 
-    if st.button("Excluir PIX selecionados"):
+    if st.button("Excluir PIX Selecionados"):
 
-        st.session_state.df_pix = edited_df[edited_df["Excluir"] == False].drop(columns=["Excluir"])
-        st.session_state.df_pix.reset_index(drop=True, inplace=True)
-
+        st.session_state.df_pix = edited[edited["Excluir"] == False].drop(columns=["Excluir"])
+        st.session_state.df_pix.reset_index(drop=True,inplace=True)
         st.rerun()
 
-    st.session_state.df_pix = edited_df.drop(columns=["Excluir"])
+    st.session_state.df_pix = edited.drop(columns=["Excluir"])
 
-    total_pix = st.session_state.df_pix["Valor (R$)"].sum()
+    st.session_state.df_pix = ordenar_por_data(st.session_state.df_pix)
 
-    st.info(f"Total PIX: R$ {total_pix:,.2f}")
-    # ================= Excel =================
+    total = st.session_state.df_pix["Valor (R$)"].sum()
 
-nome_arquivo = st.text_input("Nome do arquivo Excel", "fatura")
+    st.info(f"Total PIX: R$ {total:,.2f}")
 
-vencimento = extrair_mes_ano(nome_arquivo)
+# ================= GERAR EXCEL =================
 
-if st.button("Gerar Excel"):
+st.subheader("Exportar")
+
+def gerar_excel():
 
     output = BytesIO()
 
-    df_excel_list = []
+    with pd.ExcelWriter(output,engine="xlsxwriter") as writer:
 
-    if not st.session_state.df_transacoes.empty:
-        df_excel_list.append(
-            st.session_state.df_transacoes
-            .rename(columns={"Estabelecimento":"Descrição","Valor (R$)":"Valor"})
-            [["Data","Descrição","Valor"]]
-        )
+        st.session_state.df_transacoes.to_excel(writer,index=False,sheet_name="Debitos")
+        st.session_state.df_pix.to_excel(writer,index=False,sheet_name="PIX")
 
-    if not st.session_state.df_pix.empty:
-        df_excel_list.append(
-            st.session_state.df_pix
-            .rename(columns={"Favorecido":"Descrição","Valor (R$)":"Valor"})
-            [["Data","Descrição","Valor"]]
-        )
+    return output.getvalue()
 
-    df_excel = pd.concat(df_excel_list, ignore_index=True)
+if st.button("Gerar Excel"):
 
-    total_geral = df_excel["Valor"].sum()
-
-    df_excel.loc[len(df_excel)] = ["","TOTAL",total_geral]
-
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-
-        sheet = "Fatura"
-
-        df_excel.to_excel(writer, sheet_name=sheet, index=False)
-
-        ws = writer.book[sheet]
-
-        ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
-
-        tabela = Table(displayName="TabelaFatura", ref=ref)
-
-        tabela.tableStyleInfo = TableStyleInfo(
-            name="TableStyleMedium9",
-            showRowStripes=True
-        )
-
-        ws.add_table(tabela)
-
-        for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
-            for cell in row:
-                cell.number_format='#,##0.00'
-
-    output.seek(0)
+    excel = gerar_excel()
 
     st.download_button(
-        "Baixar Excel",
-        data=output,
-        file_name=sanitize_filename(nome_arquivo)+".xlsx",
+        label="Baixar Excel",
+        data=excel,
+        file_name="fatura.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+# ================= SHAREPOINT =================
 
-# ================= SharePoint =================
+st.subheader("Enviar para SharePoint")
 
-if st.button("Enviar total para SharePoint"):
+if st.button("Enviar para SharePoint"):
 
-    total_geral = (
-        st.session_state.df_transacoes["Valor (R$)"].sum() +
-        st.session_state.df_pix["Valor (R$)"].sum()
-    )
-
-    try:
-
-        app = msal.ConfidentialClientApplication(
-            client_id=os.getenv("AZURE_CLIENT_ID"),
-            client_credential=os.getenv("AZURE_CLIENT_SECRET"),
-            authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
-        )
-
-        token = app.acquire_token_for_client(
-            scopes=["https://graph.microsoft.com/.default"]
-        )
-
-        access_token = token.get("access_token")
-
-        SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
-        LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
-
-        url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-
-        payload={
-            "fields":{
-                "Despesa":f"Despesa Germano {nome_arquivo}",
-                "Valor":float(total_geral),
-                "Vencimento":vencimento.strftime("%m/%d/%Y"),
-                "QuemPagou":"Germano",
-                "pago":"sim"
-            }
-        }
-
-        response=requests.post(
-            url,
-            headers={
-                "Authorization":f"Bearer {access_token}",
-                "Content-Type":"application/json"
-            },
-            json=payload
-        )
-
-        if response.status_code==201:
-            st.success("Enviado para SharePoint com sucesso")
-        else:
-            st.error(response.text)
-
-    except Exception as e:
-        st.error(e)
-
-
-
-
-
-
-
+    st.info("Aqui você conecta com Power Automate ou API do SharePoint.")
