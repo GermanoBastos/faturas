@@ -6,3 +6,6 @@ pdf2image
 openpyxl
 requests
 msal
+numpy
+chardet
+xlsxwriter
