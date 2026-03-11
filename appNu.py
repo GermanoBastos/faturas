@@ -123,72 +123,92 @@ if arquivo:
         # FILTRO: manter somente negativos (onde valor numérico < 0)
         df_filtrado = df[df["_valor_num"] < 0].copy().reset_index(drop=True)
 
-        # Se quiser manter a coluna original sem o sufixo, deixar como estava; 
-        # aqui mantemos todas as colunas e a coluna auxiliar _valor_num
         st.session_state.df = df_filtrado.copy()
         st.success("CSV carregado com sucesso! (filtrado: apenas valores negativos)")
 
 # ---------------------------------------------------------
-# Exibir tabela com opção de exclusão
+# Exibir tabela com opção de exclusão (apenas Data, Valor e Descrição)
 # ---------------------------------------------------------
 if st.session_state.df is not None:
     st.header("📌 Dados carregados (apenas valores negativos)")
-
-    df = st.session_state.df
-
-    # Criar botões individualmente para exclusão
-    st.write("Clique para excluir uma linha:")
-
-    for idx in df.index:
-        cols = st.columns([10, 1])
-        # exibimos a linha sem a coluna auxiliar _valor_num ou exibimos tudo? aqui exibimos todas colunas
-        cols[0].write(df.loc[idx])
-        if cols[1].button("❌", key=f"del_{idx}"):
-            st.session_state.df = df.drop(idx).reset_index(drop=True)
-            st.rerun()
-
-    st.write("---")
-
-    # ---------------------------------------------------------
-    # Download do Excel atualizado
-    # ---------------------------------------------------------
-    st.subheader("⬇ Baixar Excel")
-    output = io.BytesIO()
-    # remover a coluna auxiliar antes de exportar (se preferir manter, comente a linha abaixo)
-    export_df = st.session_state.df.drop(columns=[c for c in st.session_state.df.columns if c == "_valor_num"], errors='ignore')
-    export_df.to_excel(output, index=False)
-    excel_bytes = output.getvalue()
-
-    st.download_button(
-        label="Baixar Excel",
-        data=excel_bytes,
-        file_name="dados_atualizados.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    st.write("---")
-
-    # ---------------------------------------------------------
-    # Enviar ao SharePoint
-    # ---------------------------------------------------------
-    st.header("📤 Enviar dados para SharePoint")
-
-    client_id = st.text_input("Client ID")
-    client_secret = st.text_input("Client Secret", type="password")
-    tenant_id = st.text_input("Tenant ID")
-    site_id = st.text_input("Site ID")
-    list_id = st.text_input("List ID")
-
-    if st.button("Enviar todos os dados"):
-        try:
-            token = get_token(client_id, client_secret, tenant_id)
-
-            # ao enviar, removemos a coluna auxiliar _valor_num do payload (caso não exista na lista)
-            for _, row in st.session_state.df.iterrows():
-                payload_row = row.drop(labels=[c for c in row.index if c == "_valor_num"], errors='ignore').to_dict()
-                add_item_to_sharepoint(token, site_id, list_id, payload_row)
-
-            st.success("Todos os dados foram enviados ao SharePoint!")
-
-        except Exception as e:
-            st.error(f"Erro ao enviar: {e}")
+    
+    # Colunas que queremos exibir
+    colunas_exibir = ["Data", "Valor", "Descrição"]
+    
+    # Verifica se as colunas existem no DataFrame
+    colunas_existentes = [col for col in colunas_exibir if col in st.session_state.df.columns]
+    
+    if len(colunas_existentes) < len(colunas_exibir):
+        st.warning(f"Algumas colunas não foram encontradas. Encontradas: {colunas_existentes}")
+    
+    if not colunas_existentes:
+        st.error("Nenhuma das colunas desejadas foi encontrada no DataFrame!")
+    else:
+        # Cria DataFrame apenas com as colunas desejadas para exibição
+        df_exibicao = st.session_state.df[colunas_existentes].copy()
+        
+        # Criar botões individualmente para exclusão
+        st.write("Clique para excluir uma linha:")
+        
+        # Exibe apenas as colunas selecionadas com opção de exclusão
+        for idx in df_exibicao.index:
+            cols = st.columns([10, 1])
+            
+            # Formata a linha para exibição
+            linha_dict = df_exibicao.loc[idx].to_dict()
+            linha_formatada = " | ".join([f"{col}: {valor}" for col, valor in linha_dict.items()])
+            cols[0].write(linha_formatada)
+            
+            if cols[1].button("❌", key=f"del_{idx}"):
+                st.session_state.df = st.session_state.df.drop(idx).reset_index(drop=True)
+                st.rerun()
+        
+        st.write("---")
+        
+        # ---------------------------------------------------------
+        # Download do Excel com as colunas desejadas
+        # ---------------------------------------------------------
+        st.subheader("⬇ Baixar Excel")
+        
+        # Prepara DataFrame para exportação (apenas Data, Valor e Descrição)
+        export_df = st.session_state.df[colunas_existentes].copy()
+        
+        output = io.BytesIO()
+        export_df.to_excel(output, index=False)
+        excel_bytes = output.getvalue()
+        
+        st.download_button(
+            label="Baixar Excel",
+            data=excel_bytes,
+            file_name="dados_atualizados.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.write("---")
+        
+        # ---------------------------------------------------------
+        # Enviar ao SharePoint com as colunas desejadas
+        # ---------------------------------------------------------
+        st.header("📤 Enviar dados para SharePoint")
+        
+        st.info(f"Serão enviadas apenas as colunas: {', '.join(colunas_existentes)}")
+        
+        client_id = st.text_input("Client ID")
+        client_secret = st.text_input("Client Secret", type="password")
+        tenant_id = st.text_input("Tenant ID")
+        site_id = st.text_input("Site ID")
+        list_id = st.text_input("List ID")
+        
+        if st.button("Enviar todos os dados"):
+            try:
+                token = get_token(client_id, client_secret, tenant_id)
+                
+                # Envia apenas as colunas desejadas
+                for _, row in st.session_state.df.iterrows():
+                    payload_row = row[colunas_existentes].to_dict()
+                    add_item_to_sharepoint(token, site_id, list_id, payload_row)
+                
+                st.success("Todos os dados foram enviados ao SharePoint!")
+                
+            except Exception as e:
+                st.error(f"Erro ao enviar: {e}")
