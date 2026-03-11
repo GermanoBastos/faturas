@@ -40,26 +40,21 @@ def extract_text_from_pdf(file):
             txt = page.extract_text()
             if txt:
                 texts.append(txt)
-
     if not texts:
         st.info("PDF sem texto detectável. Usando OCR...")
         file.seek(0)
         images = convert_from_bytes(file.read())
         for img in images:
             texts.append(pytesseract.image_to_string(img, lang="por"))
-
     return texts
 
 def extract_tabela_transacoes(text):
     pattern = r"(\d{2}/\d{2})\s+[\d.]+\s+(.+?)\s+([\d.,]+)$"
     matches = re.findall(pattern, text, re.MULTILINE)
-
     if not matches:
         return pd.DataFrame()
-
     df = pd.DataFrame(matches, columns=["Data", "Estabelecimento", "Valor (R$)"])
     df["Valor (R$)"] = df["Valor (R$)"].apply(valor_br_para_float)
-
     return df
 
 def extract_tabela_favorecidos(text):
@@ -68,38 +63,28 @@ def extract_tabela_favorecidos(text):
         r"([A-ZÀ-Ÿa-zà-ÿ0-9\.\- ]+?)\s+(\d{8})\s+"
         r"(\d{3,5})\s+([\d\-]+)\s+([\d.,]+)"
     )
-
     matches = re.findall(pattern, text, re.MULTILINE)
-
     if not matches:
         return pd.DataFrame()
-
     df_full = pd.DataFrame(matches, columns=[
         "Data","Canal","Tipo","Favorecido","ISPB","Agência","Conta","Valor (raw)"
     ])
-
     df = pd.DataFrame()
     df["Data"] = df_full["Data"]
     df["Favorecido"] = df_full["Favorecido"].str.strip()
     df["Valor (R$)"] = df_full["Valor (raw)"].apply(valor_br_para_float)
-
     return df
 
 def extrair_mes_ano(nome_arquivo):
-
     mes_ano = re.search(r"([A-Z]{3})\s*(\d{4})", nome_arquivo.upper())
-
     if mes_ano:
         mes_abrev, ano = mes_ano.groups()
         meses = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
-
         try:
             mes = meses.index(mes_abrev) + 1
         except:
             mes = 1
-
         return datetime(int(ano), mes, 1)
-
     return datetime.now()
 
 # ================== Processamento ==================
@@ -107,18 +92,17 @@ if uploaded_file:
 
     uploaded_file.seek(0)
 
+    # 🔒 guardar nome do arquivo no session_state
     if hasattr(uploaded_file, "name"):
         st.session_state["uploaded_filename"] = uploaded_file.name
 
     if "df_transacoes" not in st.session_state:
-
         texts = extract_text_from_pdf(uploaded_file)
 
         listas_transacoes = []
         listas_favorecidos = []
 
         for t in texts:
-
             dt = extract_tabela_transacoes(t)
             if not dt.empty:
                 listas_transacoes.append(dt)
@@ -129,114 +113,48 @@ if uploaded_file:
 
         st.session_state.df_transacoes = (
             pd.concat(listas_transacoes, ignore_index=True)
-            if listas_transacoes else pd.DataFrame(columns=["Data","Estabelecimento","Valor (R$)"])
+            if listas_transacoes else pd.DataFrame()
         )
 
         st.session_state.df_favorecidos = (
             pd.concat(listas_favorecidos, ignore_index=True)
-            if listas_favorecidos else pd.DataFrame(columns=["Data","Favorecido","Valor (R$)"])
+            if listas_favorecidos else pd.DataFrame()
         )
 
     st.subheader("Pré-visualização (excluir linhas manualmente)")
 
-    # ================== Inserir Débito Manual ==================
-    st.markdown("### ➕ Inserir débito manual")
-
-    col1, col2, col3, col4 = st.columns([1,4,2,1])
-
-    data_manual = col1.text_input("Data", key="deb_data")
-    desc_manual = col2.text_input("Descrição", key="deb_desc")
-    valor_manual = col3.number_input("Valor", min_value=0.0, step=0.01, key="deb_valor")
-
-    if col4.button("Adicionar", key="add_debito"):
-
-        if desc_manual and valor_manual:
-
-            nova_linha = pd.DataFrame([{
-                "Data": data_manual,
-                "Estabelecimento": desc_manual,
-                "Valor (R$)": float(valor_manual)
-            }])
-
-            st.session_state.df_transacoes = pd.concat(
-                [st.session_state.df_transacoes, nova_linha],
-                ignore_index=True
-            )
-
-            st.rerun()
-
     # ================== Débitos ==================
     if not st.session_state.df_transacoes.empty:
-
         st.markdown("### Débitos")
 
         for i, row in st.session_state.df_transacoes.iterrows():
-
             c1, c2, c3, c4 = st.columns([1,4,2,0.5])
-
             c1.write(row["Data"])
             c2.write(row["Estabelecimento"])
             c3.write(f"R$ {row['Valor (R$)']:,.2f}")
-
             if c4.button("🗑️", key=f"del_t_{i}"):
-
                 st.session_state.df_transacoes.drop(i, inplace=True)
                 st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
-
                 st.rerun()
 
         total_transacoes = st.session_state.df_transacoes["Valor (R$)"].sum()
-
         st.info(f"💰 Total de Débitos: R$ {total_transacoes:,.2f}")
-
-    # ================== Inserir PIX Manual ==================
-    st.markdown("### ➕ Inserir PIX manual")
-
-    col1, col2, col3, col4 = st.columns([1,4,2,1])
-
-    data_pix = col1.text_input("Data", key="pix_data")
-    fav_manual = col2.text_input("Favorecido", key="pix_desc")
-    valor_pix = col3.number_input("Valor", min_value=0.0, step=0.01, key="pix_valor")
-
-    if col4.button("Adicionar", key="add_pix"):
-
-        if fav_manual and valor_pix:
-
-            nova_linha = pd.DataFrame([{
-                "Data": data_pix,
-                "Favorecido": fav_manual,
-                "Valor (R$)": float(valor_pix)
-            }])
-
-            st.session_state.df_favorecidos = pd.concat(
-                [st.session_state.df_favorecidos, nova_linha],
-                ignore_index=True
-            )
-
-            st.rerun()
 
     # ================== PIX ==================
     if not st.session_state.df_favorecidos.empty:
-
         st.markdown("### Envios de PIX")
 
         for i, row in st.session_state.df_favorecidos.iterrows():
-
             c1, c2, c3, c4 = st.columns([1,4,2,0.5])
-
             c1.write(row["Data"])
             c2.write(row["Favorecido"])
             c3.write(f"R$ {row['Valor (R$)']:,.2f}")
-
             if c4.button("🗑️", key=f"del_f_{i}"):
-
                 st.session_state.df_favorecidos.drop(i, inplace=True)
                 st.session_state.df_favorecidos.reset_index(drop=True, inplace=True)
-
                 st.rerun()
 
         total_pix = st.session_state.df_favorecidos["Valor (R$)"].sum()
-
         st.info(f"💰 Total de Envios de PIX: R$ {total_pix:,.2f}")
 
     # ================== Nome do arquivo ==================
@@ -254,7 +172,6 @@ if uploaded_file:
     output = BytesIO()
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-
         style = TableStyleInfo(
             name="TableStyleMedium9",
             showFirstColumn=False,
@@ -266,7 +183,6 @@ if uploaded_file:
         df_excel_list = []
 
         if not st.session_state.df_transacoes.empty:
-
             df_excel_list.append(
                 st.session_state.df_transacoes
                 .rename(columns={"Estabelecimento":"Descrição","Valor (R$)":"Valor"})
@@ -274,7 +190,6 @@ if uploaded_file:
             )
 
         if not st.session_state.df_favorecidos.empty:
-
             df_excel_list.append(
                 st.session_state.df_favorecidos
                 .rename(columns={"Favorecido":"Descrição","Valor (R$)":"Valor"})
@@ -282,27 +197,19 @@ if uploaded_file:
             )
 
         df_excel = pd.concat(df_excel_list, ignore_index=True) if df_excel_list else pd.DataFrame(columns=["Data","Descrição","Valor"])
-
         total_geral = df_excel["Valor"].sum()
-
         df_excel.loc[len(df_excel)] = ["", "TOTAL", total_geral]
 
         sheet = "Fatura"
-
         df_excel.to_excel(writer, sheet_name=sheet, index=False)
-
         ws = writer.book[sheet]
 
         ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
-
         tabela = Table(displayName="TabelaFatura", ref=ref)
-
         tabela.tableStyleInfo = style
-
         ws.add_table(tabela)
 
         for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
-
             for cell in row:
                 cell.number_format = '#,##0.00'
 
@@ -314,3 +221,52 @@ if uploaded_file:
         file_name=sanitize_filename(nome_arquivo)+".xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    # ================== SharePoint ==================
+    if st.button("Enviar total para SharePoint"):
+        try:
+            app = msal.ConfidentialClientApplication(
+                client_id=os.getenv("AZURE_CLIENT_ID"),
+                client_credential=os.getenv("AZURE_CLIENT_SECRET"),
+                authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
+            )
+
+            token = app.acquire_token_for_client(
+                scopes=["https://graph.microsoft.com/.default"]
+            )
+
+            access_token = token.get("access_token")
+            if not access_token:
+                raise Exception("Erro ao obter token")
+
+            SITE_ID = "devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+            LIST_ID = "b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+
+            url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+
+            payload = {
+                "fields": {
+                    "Despesa": f"Despesa Germano {nome_arquivo}",
+                    "Valor": float(total_geral),
+                    "Vencimento": vencimento.strftime("%m/%d/%Y"),
+                    "QuemPagou": "Germano",
+                    "pago": "sim"
+                }
+            }
+
+            response = requests.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                json=payload
+            )
+
+            if response.status_code == 201:
+                st.success("✅ Enviado para SharePoint com sucesso")
+            else:
+                st.error(f"❌ Erro SharePoint: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            st.error(f"Erro na integração SharePoint: {e}")
