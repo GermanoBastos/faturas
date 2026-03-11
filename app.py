@@ -166,6 +166,10 @@ if uploaded_file:
                 [st.session_state.df_transacoes, nova_linha],
                 ignore_index=True
             )
+            # limpar campos
+            st.session_state.deb_data = ""
+            st.session_state.deb_desc = ""
+            st.session_state.deb_valor = 0.0
 
             st.rerun()
 
@@ -216,7 +220,10 @@ if uploaded_file:
                 [st.session_state.df_favorecidos, nova_linha],
                 ignore_index=True
             )
-
+            # limpar campos
+        st.session_state.pix_data = ""
+        st.session_state.pix_desc = ""
+        st.session_state.pix_valor = 0.0
             st.rerun()
 
     # ================== PIX ==================
@@ -374,4 +381,5 @@ if uploaded_file:
         except Exception as e:
 
             st.error(f"Erro na integração SharePoint: {e}")
+
 
