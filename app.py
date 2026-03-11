@@ -142,25 +142,28 @@ st.subheader("Débitos")
 
 if not st.session_state.df_transacoes.empty:
 
-    df = st.session_state.df_transacoes.copy()
+    df_deb = st.session_state.df_transacoes.copy()
+    df_deb["Excluir"] = False
 
-    df["Excluir"] = False
-
-    edited = st.data_editor(
-        df,
+    edited_deb = st.data_editor(
+        df_deb,
         use_container_width=True,
-        num_rows="dynamic"
+        num_rows="dynamic",
+        key="editor_debitos"
     )
 
     if st.button("Excluir Débitos Selecionados"):
 
-        st.session_state.df_transacoes = edited[edited["Excluir"] == False].drop(columns=["Excluir"])
-        st.session_state.df_transacoes.reset_index(drop=True,inplace=True)
+        st.session_state.df_transacoes = edited_deb[
+            edited_deb["Excluir"] == False
+        ].drop(columns=["Excluir"])
+
+        st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
+
         st.rerun()
 
-    st.session_state.df_transacoes = edited.drop(columns=["Excluir"])
-
-    st.session_state.df_transacoes = ordenar_por_data(st.session_state.df_transacoes)
+    # Atualiza apenas as colunas editadas
+    st.session_state.df_transacoes = edited_deb.drop(columns=["Excluir"])
 
     total = st.session_state.df_transacoes["Valor (R$)"].sum()
 
@@ -172,29 +175,31 @@ st.subheader("PIX")
 
 if not st.session_state.df_pix.empty:
 
-    df = st.session_state.df_pix.copy()
+    df_pix = st.session_state.df_pix.copy()
+    df_pix["Excluir"] = False
 
-    df["Excluir"] = False
-
-    edited = st.data_editor(
-        df,
+    edited_pix = st.data_editor(
+        df_pix,
         use_container_width=True,
-        num_rows="dynamic"
+        num_rows="dynamic",
+        key="editor_pix"
     )
 
     if st.button("Excluir PIX Selecionados"):
 
-        st.session_state.df_pix = edited[edited["Excluir"] == False].drop(columns=["Excluir"])
-        st.session_state.df_pix.reset_index(drop=True,inplace=True)
+        st.session_state.df_pix = edited_pix[
+            edited_pix["Excluir"] == False
+        ].drop(columns=["Excluir"])
+
+        st.session_state.df_pix.reset_index(drop=True, inplace=True)
+
         st.rerun()
 
-    st.session_state.df_pix = edited.drop(columns=["Excluir"])
+    st.session_state.df_pix = edited_pix.drop(columns=["Excluir"])
 
-    st.session_state.df_pix = ordenar_por_data(st.session_state.df_pix)
+    total_pix = st.session_state.df_pix["Valor (R$)"].sum()
 
-    total = st.session_state.df_pix["Valor (R$)"].sum()
-
-    st.info(f"Total PIX: R$ {total:,.2f}")
+    st.info(f"Total PIX: R$ {total_pix:,.2f}")
 
 # ================= GERAR EXCEL =================
 
@@ -229,3 +234,4 @@ st.subheader("Enviar para SharePoint")
 if st.button("Enviar para SharePoint"):
 
     st.info("Aqui você conecta com Power Automate ou API do SharePoint.")
+
