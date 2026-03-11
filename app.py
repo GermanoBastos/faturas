@@ -203,7 +203,6 @@ with st.form("form_debito", clear_on_submit=True):
 
     
 
-# ================= LISTA DÉBITOS =================
 
 # ================= LISTA DÉBITOS =================
 
@@ -211,65 +210,11 @@ if "df_transacoes" in st.session_state and not st.session_state.df_transacoes.em
 
     st.subheader("Débitos")
 
-    # ===== formulário edição (AGORA FICA ACIMA)
-
-    if st.session_state.edit_debito is not None:
-
-        idx = st.session_state.edit_debito
-        row = st.session_state.df_transacoes.loc[idx]
-
-        st.markdown("### Editar Débito")
-
-        with st.form("editar_debito"):
-
-            c1,c2,c3 = st.columns(3)
-
-            data = c1.text_input("Data", row["Data"])
-            desc = c2.text_input("Descrição", row["Estabelecimento"])
-            valor = c3.text_input("Valor", str(row["Valor (R$)"]))
-
-            salvar = st.form_submit_button("Salvar")
-            cancelar = st.form_submit_button("Cancelar")
-
-            if salvar:
-
-                v = parse_valor_input(valor)
-
-                if v is not None:
-
-                    st.session_state.df_transacoes.loc[idx] = [
-                        data,
-                        desc.upper(),
-                        v
-                    ]
-
-                    st.session_state.edit_debito = None
-                    st.rerun()
-
-            if cancelar:
-                st.session_state.edit_debito = None
-                st.rerun()
-
-    # ===== lista de itens
-
-    for i,row in st.session_state.df_transacoes.iterrows():
-
-        a,b,c,d,e = st.columns([1,4,2,0.5,0.5])
-
-        a.write(row["Data"])
-        b.write(row["Estabelecimento"])
-        c.write(f"R$ {row['Valor (R$)']:,.2f}")
-
-        if d.button("✏️", key=f"edit_t_{i}"):
-            st.session_state.edit_debito = i
-            st.rerun()
-
-        if e.button("🗑️", key=f"del_t_{i}"):
-
-            st.session_state.df_transacoes.drop(i, inplace=True)
-            st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
-
-            st.rerun()
+    st.session_state.df_transacoes = st.data_editor(
+        st.session_state.df_transacoes,
+        num_rows="dynamic",
+        use_container_width=True
+    )
 
     total_debito = st.session_state.df_transacoes["Valor (R$)"].sum()
 
@@ -453,6 +398,7 @@ if st.button("Enviar total para SharePoint"):
 
     except Exception as e:
         st.error(e)
+
 
 
 
