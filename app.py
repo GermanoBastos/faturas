@@ -540,7 +540,7 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
     df = st.session_state.df_sharepoint.copy()
 
     # Seleciona colunas para exibição
-    df_view = df[["Despesa", "Valor","QuemPagou","Mes", "Ano"]].copy()
+    df_view = df[["ID","Despesa", "Valor","QuemPagou","Mes", "Ano"]].copy()
     # Renomeia os cabeçalhos para exibição
     df_view.rename(columns={
         "Valor": "Valor (R$)","QuemPagou":"Pago Por:"
@@ -578,5 +578,6 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
             pass
         st.session_state.df_sharepoint.update(edited.drop(columns=["Excluir"]))
         st.success("Itens atualizados com sucesso!")
+
 
 
