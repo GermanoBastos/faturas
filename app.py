@@ -558,8 +558,8 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
     # =========================================================================
     # EXCLUSÃO DE ITENS
     # =========================================================================
-    if st.button("Excluir itens selecionados"):
-    ids_para_excluir = edited.loc[edited["Excluir"], "ID"].tolist()
+        if st.button("Excluir itens selecionados"):
+        ids_para_excluir = edited.loc[edited["Excluir"], "ID"].tolist()
     if ids_para_excluir:
         try:
             # Autenticação MSAL
