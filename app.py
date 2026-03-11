@@ -384,7 +384,7 @@ if uploaded_file:
                     "Vencimento":data_vencimento.strftime("%Y-%m-%d"),
                     "QuemPagou":"Germano",
                     "pago":"sim",
-                    "Data":date.today(),
+                    "Data":date.today().strftime("%Y-%m-%d")
                 }
             }
 
@@ -404,6 +404,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
