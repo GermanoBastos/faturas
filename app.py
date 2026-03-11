@@ -12,8 +12,7 @@ from openpyxl.utils import get_column_letter
 import os
 import msal
 import requests
-from datetime import datetime
-
+from datetime import datetime, date
 st.set_page_config(page_title="Extrair Fatura para Excel e SharePoint", layout="wide")
 st.title("Extrair Débitos da Fatura (com Totais, Excel e SharePoint)")
 
@@ -404,6 +403,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
