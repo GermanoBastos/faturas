@@ -320,3 +320,123 @@ if "df_pix" in st.session_state and not st.session_state.df_pix.empty:
     total_pix=st.session_state.df_pix["Valor (R$)"].sum()
 
     st.info(f"Total PIX: R$ {total_pix:,.2f}")
+    # ================= Excel =================
+
+nome_arquivo = st.text_input("Nome do arquivo Excel", "fatura")
+
+vencimento = extrair_mes_ano(nome_arquivo)
+
+if st.button("Gerar Excel"):
+
+    output = BytesIO()
+
+    df_excel_list = []
+
+    if not st.session_state.df_transacoes.empty:
+        df_excel_list.append(
+            st.session_state.df_transacoes
+            .rename(columns={"Estabelecimento":"Descrição","Valor (R$)":"Valor"})
+            [["Data","Descrição","Valor"]]
+        )
+
+    if not st.session_state.df_pix.empty:
+        df_excel_list.append(
+            st.session_state.df_pix
+            .rename(columns={"Favorecido":"Descrição","Valor (R$)":"Valor"})
+            [["Data","Descrição","Valor"]]
+        )
+
+    df_excel = pd.concat(df_excel_list, ignore_index=True)
+
+    total_geral = df_excel["Valor"].sum()
+
+    df_excel.loc[len(df_excel)] = ["","TOTAL",total_geral]
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+
+        sheet = "Fatura"
+
+        df_excel.to_excel(writer, sheet_name=sheet, index=False)
+
+        ws = writer.book[sheet]
+
+        ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
+
+        tabela = Table(displayName="TabelaFatura", ref=ref)
+
+        tabela.tableStyleInfo = TableStyleInfo(
+            name="TableStyleMedium9",
+            showRowStripes=True
+        )
+
+        ws.add_table(tabela)
+
+        for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
+            for cell in row:
+                cell.number_format='#,##0.00'
+
+    output.seek(0)
+
+    st.download_button(
+        "Baixar Excel",
+        data=output,
+        file_name=sanitize_filename(nome_arquivo)+".xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+# ================= SharePoint =================
+
+if st.button("Enviar total para SharePoint"):
+
+    total_geral = (
+        st.session_state.df_transacoes["Valor (R$)"].sum() +
+        st.session_state.df_pix["Valor (R$)"].sum()
+    )
+
+    try:
+
+        app = msal.ConfidentialClientApplication(
+            client_id=os.getenv("AZURE_CLIENT_ID"),
+            client_credential=os.getenv("AZURE_CLIENT_SECRET"),
+            authority=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}"
+        )
+
+        token = app.acquire_token_for_client(
+            scopes=["https://graph.microsoft.com/.default"]
+        )
+
+        access_token = token.get("access_token")
+
+        SITE_ID="devgbsn.sharepoint.com,351e9978-140f-427e-a87d-332f6ce67a46,fc4e159a-5954-442f-a08f-28617bc84da1"
+        LIST_ID="b7b00e6d-9ed0-492c-958f-f80f15bd8dce"
+
+        url=f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+
+        payload={
+            "fields":{
+                "Despesa":f"Despesa Germano {nome_arquivo}",
+                "Valor":float(total_geral),
+                "Vencimento":vencimento.strftime("%m/%d/%Y"),
+                "QuemPagou":"Germano",
+                "pago":"sim"
+            }
+        }
+
+        response=requests.post(
+            url,
+            headers={
+                "Authorization":f"Bearer {access_token}",
+                "Content-Type":"application/json"
+            },
+            json=payload
+        )
+
+        if response.status_code==201:
+            st.success("Enviado para SharePoint com sucesso")
+        else:
+            st.error(response.text)
+
+    except Exception as e:
+        st.error(e)
+
