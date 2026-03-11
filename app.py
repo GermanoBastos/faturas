@@ -154,24 +154,25 @@ if uploaded_file:
 
     if col4.button("Adicionar", key="add_debito"):
 
-        if desc_manual and valor_manual:
+    if desc_manual and valor_manual:
 
-            nova_linha = pd.DataFrame([{
-                "Data": data_manual,
-                "Estabelecimento": desc_manual,
-                "Valor (R$)": float(valor_manual)
-            }])
+        nova_linha = pd.DataFrame([{
+            "Data": data_manual,
+            "Estabelecimento": desc_manual,
+            "Valor (R$)": float(valor_manual)
+        }])
 
-            st.session_state.df_transacoes = pd.concat(
-                [st.session_state.df_transacoes, nova_linha],
-                ignore_index=True
-            )
-            # limpar campos
-            st.session_state.deb_data = ""
-            st.session_state.deb_desc = ""
-            st.session_state.deb_valor = 0.0
+        st.session_state.df_transacoes = pd.concat(
+            [st.session_state.df_transacoes, nova_linha],
+            ignore_index=True
+        )
 
-            st.rerun()
+        # limpar campos
+        st.session_state.deb_data = ""
+        st.session_state.deb_desc = ""
+        st.session_state.deb_valor = 0.0
+
+        st.rerun()
 
     # ================== Débitos ==================
     if not st.session_state.df_transacoes.empty:
@@ -208,23 +209,25 @@ if uploaded_file:
 
     if col4.button("Adicionar", key="add_pix"):
 
-        if fav_manual and valor_pix:
+    if fav_manual and valor_pix:
 
-            nova_linha = pd.DataFrame([{
-                "Data": data_pix,
-                "Favorecido": fav_manual,
-                "Valor (R$)": float(valor_pix)
-            }])
+        nova_linha = pd.DataFrame([{
+            "Data": data_pix,
+            "Favorecido": fav_manual,
+            "Valor (R$)": float(valor_pix)
+        }])
 
-            st.session_state.df_favorecidos = pd.concat(
-                [st.session_state.df_favorecidos, nova_linha],
-                ignore_index=True
-            )
-            # limpar campos
+        st.session_state.df_favorecidos = pd.concat(
+            [st.session_state.df_favorecidos, nova_linha],
+            ignore_index=True
+        )
+
+        # limpar campos
         st.session_state.pix_data = ""
         st.session_state.pix_desc = ""
         st.session_state.pix_valor = 0.0
-            st.rerun()
+
+        st.rerun()
 
     # ================== PIX ==================
     if not st.session_state.df_favorecidos.empty:
@@ -381,5 +384,6 @@ if uploaded_file:
         except Exception as e:
 
             st.error(f"Erro na integração SharePoint: {e}")
+
 
 
