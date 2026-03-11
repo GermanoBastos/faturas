@@ -190,6 +190,9 @@ if uploaded_file:
                     [st.session_state.df_transacoes, nova],
                     ignore_index=True
                 )
+                # ordenar por data
+                st.session_state.df_transacoes.sort_values("Data", inplace=True)
+                st.session_state.df_transacoes.reset_index(drop=True, inplace=True)
     
                 st.rerun()
 
@@ -272,6 +275,9 @@ if uploaded_file:
                         [st.session_state.df_pix, nova],
                         ignore_index=True
                     )
+                    # ordenar por data
+                    st.session_state.df_pix.sort_values("Data", inplace=True)
+                    st.session_state.df_pix.reset_index(drop=True, inplace=True)
         
                     st.rerun()
     # ================= Excel =================
@@ -392,6 +398,7 @@ if uploaded_file:
 
         except Exception as e:
             st.error(e)
+
 
 
 
