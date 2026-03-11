@@ -503,9 +503,8 @@ if "df_sharepoint" in st.session_state and not st.session_state.df_sharepoint.em
             # Chama API para atualizar SharePoint...
         st.session_state.df_sharepoint.update(edited.drop(columns=["Excluir"]))
         st.success("Itens atualizados com sucesso!")
-                st.experimental_rerun()
-            except Exception as e:
-                st.error(f"Erro ao atualizar itens: {e}")
+               
+
 
 
 
